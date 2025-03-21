@@ -11,7 +11,12 @@ body.dark-mode {
     background: #1e1e1e;
     color: #ddd;
 }
-
+/* Add to styles.css */
+main {
+    flex: 1;
+    padding: 20px;
+    max-width: 100%; /* Ensure full width on smaller screens */
+}
 header {
     background: #007bff;
     color: white;
@@ -172,6 +177,13 @@ button:disabled {
     display: none !important; /* Increased specificity and forced hiding */
 }
 
+
+.match-count {
+    font-size: 0.9em;
+    color: #666;
+    margin-left: 10px;
+}
+
 .tree ul {
     list-style-type: none;
     padding-left: 20px;
@@ -218,6 +230,7 @@ button:disabled {
 
 .dark-mode .tree .highlight {
     background: #ffd700;
+    color:#2d2d2d;
 }
 
 .tooltip {

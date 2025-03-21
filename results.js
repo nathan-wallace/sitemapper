@@ -1,20 +1,16 @@
 (() => {
     const state = {
-        loading: false,
-        error: null,
+        originalUrls: [],
         currentHierarchy: null,
         currentSortBy: 'url'
     };
 
     const elements = {
-        sitemapUrl: document.getElementById('sitemapUrl'),
-        loadUrlBtn: document.getElementById('loadUrlBtn'),
-        sitemapFile: document.getElementById('sitemapFile'),
-        uploadFileBtn: document.getElementById('uploadFileBtn'),
+        backBtn: document.getElementById('backBtn'),
         exportHtmlBtn: document.getElementById('exportHtmlBtn'),
         exportCsvBtn: document.getElementById('exportCsvBtn'),
         exportJsonBtn: document.getElementById('exportJsonBtn'),
-        clearCacheBtn: document.getElementById('clearCacheBtn'),
+        collapseAllBtn: document.getElementById('collapseAllBtn'),
         feedback: document.getElementById('feedback'),
         loading: document.getElementById('loading'),
         loadProgress: document.getElementById('loadProgress'),
@@ -30,62 +26,32 @@
         resetFiltersBtn: document.getElementById('resetFiltersBtn'),
         urlSearch: document.getElementById('urlSearch'),
         themeToggleBtn: document.getElementById('themeToggleBtn'),
-        collapseAllBtn: document.getElementById('collapseAllBtn')
+        matchCount: document.getElementById('matchCount')
     };
 
     function showLoading(progress = 0) {
-        state.loading = true;
         elements.loading.classList.remove('hidden');
         elements.loadProgress.value = progress;
         elements.error.classList.add('hidden');
         elements.feedback.classList.add('hidden');
-        console.log('Loading shown, progress:', progress);
     }
 
     function hideLoading() {
-        state.loading = false;
         elements.loading.classList.add('hidden');
-        console.log('Loading hidden');
     }
 
     function showFeedback(message) {
-        hideLoading(); // Ensure loading is hidden before feedback
+        hideLoading();
         elements.feedback.textContent = message;
         elements.feedback.classList.remove('hidden');
         elements.error.classList.add('hidden');
-        console.log('Feedback shown:', message);
     }
 
     function showError(message) {
-        hideLoading(); // Ensure loading is hidden before error
-        state.error = message;
-        let displayMessage = message;
-        if (message.includes('HTTP 403')) {
-            displayMessage = 'Request blocked by server (403 Forbidden). Try a different URL.';
-        } else if (message.includes('HTTP')) {
-            displayMessage = `Request failed: ${message}. Check the URL and try again.`;
-        } else if (message === 'Please enter a sitemap URL') {
-            displayMessage = 'Please enter a valid sitemap URL (e.g., https://example.com/sitemap.xml).';
-        }
-        elements.error.textContent = displayMessage;
+        hideLoading();
+        elements.error.textContent = message;
         elements.error.classList.remove('hidden');
         elements.feedback.classList.add('hidden');
-        console.log('Error shown:', displayMessage);
-    }
-
-    function getCachedSitemap(url) {
-        const cached = localStorage.getItem(`sitemap:${url}`);
-        return cached ? JSON.parse(cached) : null;
-    }
-
-    function setCachedSitemap(url, urls) {
-        try {
-            localStorage.setItem(`sitemap:${url}`, JSON.stringify(urls));
-            enableExportButtons();
-        } catch (e) {
-            console.error('Local Storage full or error:', e);
-            showError('Failed to cache sitemap: storage limit reached. Clear cache to continue.');
-        }
     }
 
     function enableExportButtons() {
@@ -100,71 +66,45 @@
         elements.exportJsonBtn.disabled = true;
     }
 
-    async function submitSitemapUrl() {
-        const url = elements.sitemapUrl.value.trim();
-        if (!url) return showError('Please enter a sitemap URL');
-
-        const cachedUrls = getCachedSitemap(url);
-        if (cachedUrls) {
-            console.log(`Using cached data for ${url}`);
-            buildTree(cachedUrls);
-            showFeedback(`Processed ${cachedUrls.length} URLs from cache for ${url}`);
+    async function loadSitemapData() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+        if (!id) {
+            showError('No sitemap ID provided. Please load a sitemap first.');
             return;
         }
 
         showLoading(10);
         try {
-            const response = await fetch('/sitemap-url', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
-            });
+            const response = await fetch(`/results-data?id=${id}`);
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || 'Failed to fetch sitemap');
+                throw new Error(data.error || 'Failed to load sitemap data');
             }
             const data = await response.json();
+            state.originalUrls = data.urls;
             showLoading(50);
-            setCachedSitemap(url, data.urls);
-            buildTree(data.urls);
+            buildTree(state.originalUrls);
             showLoading(100);
-            showFeedback(`Processed ${data.urlCount} URLs for ${url}`);
+            showFeedback(`Loaded ${data.urlCount} URLs`);
         } catch (error) {
             showError(`Error: ${error.message}`);
         }
     }
 
-    async function uploadSitemapFile() {
-        const file = elements.sitemapFile.files[0];
-        if (!file) return showError('Please select a sitemap file');
-
-        showLoading(10);
-        const formData = new FormData();
-        formData.append('sitemapFile', file);
-        try {
-            const response = await fetch('/sitemap-upload', {
-                method: 'POST',
-                body: formData
+    function buildTree(urls, filter = {}, sortBy = 'url', expandAll = false) {
+        // Store the current expanded state before rebuilding
+        const expandedNodes = new Set();
+        if (!expandAll) {
+            document.querySelectorAll('.tree .toggle.open').forEach(toggle => {
+                expandedNodes.add(toggle.textContent);
             });
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error || 'Failed to upload sitemap');
-            }
-            const data = await response.json();
-            showLoading(50);
-            setCachedSitemap(file.name, data.urls);
-            buildTree(data.urls);
-            showLoading(100);
-            showFeedback(`Processed ${data.urlCount} URLs from uploaded file ${file.name}`);
-        } catch (error) {
-            showError(`Error: ${error.message}`);
         }
-    }
 
-    function buildTree(urls, filter = {}, sortBy = 'url') {
         elements.tree.innerHTML = '';
         if (!urls || urls.length === 0) {
             elements.tree.textContent = 'No URLs found in sitemap.';
+            elements.matchCount.textContent = '';
             disableExportButtons();
             hideLoading();
             return;
@@ -176,6 +116,15 @@
             return (priority === 'N/A' || parseFloat(priority) >= minPriority) &&
                    (!lastmodDate || (lastmod !== 'N/A' && new Date(lastmod) >= lastmodDate));
         });
+
+        elements.matchCount.textContent = `(${filteredUrls.length} of ${urls.length} URLs)`;
+
+        if (filteredUrls.length === 0) {
+            elements.tree.textContent = 'No URLs match the current filters.';
+            disableExportButtons();
+            hideLoading();
+            return;
+        }
 
         const hierarchy = {};
         filteredUrls.forEach(({ loc, lastmod, changefreq, priority }) => {
@@ -218,7 +167,7 @@
         });
 
         sortedRoots.forEach((rootUrl) => {
-            ul.appendChild(createTreeNode(rootUrl, hierarchy[rootUrl], sortBy));
+            ul.appendChild(createTreeNode(rootUrl, hierarchy[rootUrl], sortBy, expandedNodes, expandAll));
         });
         elements.tree.appendChild(ul);
 
@@ -229,9 +178,10 @@
         state.currentHierarchy = hierarchy;
         state.currentSortBy = sortBy;
         enableExportButtons();
+        hideLoading();
     }
 
-    function createTreeNode(url, node, sortBy) {
+    function createTreeNode(url, node, sortBy, expandedNodes, expandAll) {
         const li = document.createElement('li');
         li.setAttribute('role', 'treeitem');
         const span = document.createElement('span');
@@ -240,10 +190,12 @@
         const children = Object.keys(node.children);
         if (children.length > 0) {
             span.className = 'toggle';
-            span.setAttribute('aria-expanded', 'false');
+            const shouldExpand = expandAll || expandedNodes.has(url);
+            span.setAttribute('aria-expanded', shouldExpand ? 'true' : 'false');
+            if (shouldExpand) span.classList.add('open');
             const ul = document.createElement('ul');
-            ul.classList.add('hidden');
             ul.setAttribute('role', 'group');
+            if (!shouldExpand) ul.classList.add('hidden');
             const sortedChildren = children.sort((a, b) => {
                 if (sortBy === 'priority') {
                     const pa = node.children[a].details.priority !== 'N/A' ? parseFloat(node.children[a].details.priority) : 0;
@@ -257,7 +209,7 @@
                 return a.localeCompare(b);
             });
             sortedChildren.forEach((childUrl) => {
-                ul.appendChild(createTreeNode(childUrl, node.children[childUrl], sortBy));
+                ul.appendChild(createTreeNode(childUrl, node.children[childUrl], sortBy, expandedNodes, expandAll));
             });
             li.appendChild(span);
             li.appendChild(ul);
@@ -426,26 +378,12 @@
         URL.revokeObjectURL(url);
     }
 
-    function clearCache() {
-        const url = elements.sitemapUrl.value.trim();
-        if (url) {
-            localStorage.removeItem(`sitemap:${url}`);
-            alert(`Cache cleared for ${url}`);
-        } else {
-            localStorage.clear();
-            alert('All sitemap caches cleared');
-        }
-        buildTree([]);
-        disableExportButtons();
-    }
-
     function resetFilters() {
         elements.priorityFilter.value = '0';
         elements.lastmodFilter.value = '';
         elements.sortBy.value = 'url';
         elements.urlSearch.value = '';
-        const cachedUrls = getCachedSitemap(elements.sitemapUrl.value.trim()) || [];
-        buildTree(cachedUrls, {}, 'url');
+        buildTree(state.originalUrls);
         document.querySelectorAll('.tree span').forEach(span => span.classList.remove('highlight'));
     }
 
@@ -460,50 +398,34 @@
         });
     }
 
-    document.getElementById('controls').addEventListener('click', (e) => {
-        const target = e.target;
-        if (target === elements.loadUrlBtn) submitSitemapUrl();
-        else if (target === elements.uploadFileBtn) uploadSitemapFile();
-        else if (target === elements.exportHtmlBtn) exportHtmlReport();
-        else if (target === elements.exportCsvBtn) exportCsvReport();
-        else if (target === elements.exportJsonBtn) exportJsonReport();
-        else if (target === elements.clearCacheBtn) clearCache();
-        else if (target === elements.collapseAllBtn) collapseAll();
-    });
-
-    elements.themeToggleBtn.addEventListener('click', () => {
-        document.body.classList.toggle('dark-mode');
-    });
-
-    elements.tree.addEventListener('click', (e) => {
-        const toggle = e.target.closest('.toggle');
-        if (toggle) {
+    function expandAll() {
+        document.querySelectorAll('.tree .toggle').forEach(toggle => {
             const ul = toggle.nextElementSibling;
             if (ul && ul.tagName === 'UL') {
-                ul.classList.toggle('hidden');
-                const isOpen = !ul.classList.contains('hidden');
-                toggle.classList.toggle('open', isOpen);
-                toggle.setAttribute('aria-expanded', isOpen);
+                ul.classList.remove('hidden');
+                toggle.classList.add('open');
+                toggle.setAttribute('aria-expanded', 'true');
             }
-        }
-    });
+        });
+    }
 
-    elements.toggleSidebarBtn.addEventListener('click', () => {
-        elements.sidebar.classList.toggle('hidden-mobile');
-    });
-
+    elements.backBtn.addEventListener('click', () => window.location.href = '/');
+    elements.exportHtmlBtn.addEventListener('click', exportHtmlReport);
+    elements.exportCsvBtn.addEventListener('click', exportCsvReport);
+    elements.exportJsonBtn.addEventListener('click', exportJsonReport);
+    elements.collapseAllBtn.addEventListener('click', collapseAll);
+    elements.themeToggleBtn.addEventListener('click', () => document.body.classList.toggle('dark-mode'));
+    elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden-mobile'));
     elements.applyFiltersBtn.addEventListener('click', () => {
         const filter = {
             priority: elements.priorityFilter.value,
             lastmod: elements.lastmodFilter.value
         };
         const sortBy = elements.sortBy.value;
-        const cachedUrls = getCachedSitemap(elements.sitemapUrl.value.trim()) || [];
-        buildTree(cachedUrls, filter, sortBy);
+        buildTree(state.originalUrls, filter, sortBy, true); // Expand all when applying filters
+        expandAll(); // Ensure all nodes are expanded after build
     });
-
     elements.resetFiltersBtn.addEventListener('click', resetFilters);
-
     elements.urlSearch.addEventListener('input', () => {
         const searchTerm = elements.urlSearch.value.toLowerCase();
         document.querySelectorAll('.tree span').forEach(span => {
@@ -523,12 +445,19 @@
             }
         });
     });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && document.activeElement === elements.sitemapUrl) submitSitemapUrl();
-        if (e.ctrlKey && e.key === 'e' && state.currentHierarchy) exportHtmlReport();
+    elements.tree.addEventListener('click', (e) => {
+        const toggle = e.target.closest('.toggle');
+        if (toggle) {
+            const ul = toggle.nextElementSibling;
+            if (ul && ul.tagName === 'UL') {
+                ul.classList.toggle('hidden');
+                const isOpen = !ul.classList.contains('hidden');
+                toggle.classList.toggle('open', isOpen);
+                toggle.setAttribute('aria-expanded', isOpen);
+            }
+        }
     });
 
-    // Ensure loading is hidden on page load
+    loadSitemapData();
     hideLoading();
 })();
