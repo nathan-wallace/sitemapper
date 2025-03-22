@@ -1,61 +1,50 @@
-// src/client/components/ExportButtons.js
-export default function setupExportButtons(urls) {
-  const exportHtmlBtn = document.getElementById('exportHtmlBtn');
-  const exportCsvBtn = document.getElementById('exportCsvBtn');
-  const exportJsonBtn = document.getElementById('exportJsonBtn');
+export default function renderExportButtons({ urls, treeContainer, filtersContainer, id }) {
+  const controlsContainer = document.querySelector('header .export-buttons'); // Target header specifically
+  if (!controlsContainer) return;
 
-  // Enable buttons if URLs are provided
-  if (urls && urls.length > 0) {
-    exportHtmlBtn.disabled = false;
-    exportCsvBtn.disabled = false;
-    exportJsonBtn.disabled = false;
-  }
+  const backButton = controlsContainer.querySelector('#backBtn');
+  const exportHtmlBtn = controlsContainer.querySelector('#exportHtmlBtn');
+  const exportJsonBtn = controlsContainer.querySelector('#exportJsonBtn');
+  const exportCsvBtn = controlsContainer.querySelector('#exportCsvBtn');
 
-  // Export to HTML
+  if (!backButton || !exportHtmlBtn || !exportJsonBtn || !exportCsvBtn) return;
+
+  backButton.disabled = false;
+  exportHtmlBtn.disabled = false;
+  exportJsonBtn.disabled = false;
+  exportCsvBtn.disabled = false;
+
+  backButton.addEventListener('click', () => {
+    window.location.href = '/';
+  });
+
   exportHtmlBtn.addEventListener('click', () => {
-    const htmlContent = generateHtmlExport(urls);
-    downloadFile(htmlContent, 'sitemap.html', 'text/html');
+    const html = treeContainer.innerHTML;
+    const blob = new Blob([`<html><body>${html}</body></html>`], { type: 'text/html' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'sitemap.html';
+    link.click();
   });
 
-  // Export to CSV
-  exportCsvBtn.addEventListener('click', () => {
-    const csvContent = generateCsvExport(urls);
-    downloadFile(csvContent, 'sitemap.csv', 'text/csv');
-  });
-
-  // Export to JSON
   exportJsonBtn.addEventListener('click', () => {
-    const jsonContent = JSON.stringify(urls, null, 2);
-    downloadFile(jsonContent, 'sitemap.json', 'application/json');
+    const blob = new Blob([JSON.stringify(urls, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'sitemap.json';
+    link.click();
   });
-}
 
-// Generate HTML export
-function generateHtmlExport(urls) {
-  let html = '<!DOCTYPE html><html><body><h1>Sitemap URLs</h1><ul>';
-  urls.forEach((url) => {
-    html += `<li><a href="${url.loc}">${url.loc}</a> (Last Modified: ${url.lastmod})</li>`;
+  exportCsvBtn.addEventListener('click', () => {
+    const header = ['URL', 'Last Modified', 'Change Frequency', 'Priority'];
+    const csvRows = [header.join(',')];
+    urls.forEach(({ loc, lastmod, changefreq, priority }) => {
+      csvRows.push(`"${loc}","${lastmod}","${changefreq}","${priority}"`);
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'sitemap.csv';
+    link.click();
   });
-  html += '</ul></body></html>';
-  return html;
-}
-
-// Generate CSV export
-function generateCsvExport(urls) {
-  let csv = 'URL,Last Modified,Change Frequency,Priority\n';
-  urls.forEach((url) => {
-    csv += `"${url.loc}","${url.lastmod}","${url.changefreq}","${url.priority}"\n`;
-  });
-  return csv;
-}
-
-// Download file utility
-function downloadFile(content, fileName, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 }

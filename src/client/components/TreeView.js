@@ -1,6 +1,3 @@
-import { showLoading, hideLoading } from '../utils/dom.js';
-
-// TreeView component extracted from your results.js
 export class TreeView {
   constructor(container) {
     this.container = container;
