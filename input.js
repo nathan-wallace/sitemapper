@@ -37,7 +37,6 @@
         elements.feedback.classList.add('hidden');
     }
 
-    // Check for error or feedback in URL query string on page load
     const urlParams = new URLSearchParams(window.location.search);
     const errorMessage = urlParams.get('error');
     const feedbackMessage = urlParams.get('feedback');

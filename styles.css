@@ -11,7 +11,7 @@ body.dark-mode {
     background: #1e1e1e;
     color: #ddd;
 }
-/* Add to styles.css */
+
 main {
     flex: 1;
     padding: 20px;
@@ -314,4 +314,262 @@ footer a {
     button {
         width: 100%;
     }
+}
+
+/* Existing styles assumed to be present; only changes/additions shown */
+.container {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.sidebar {
+    width: 300px;
+    padding: 20px;
+    background: #f9f9f9;
+    border-right: 1px solid #ddd;
+    transition: transform 0.3s ease;
+}
+
+.sidebar.hidden {
+    transform: translateX(-100%);
+    position: absolute;
+    z-index: 10;
+    height: 100%;
+}
+
+main {
+    flex: 1;
+    padding: 20px;
+    min-width: 0; /* Prevents overflow */
+}
+
+#search {
+    margin-bottom: 20px;
+}
+
+#search label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#search input {
+    width: 100%;
+    padding: 8px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#search .tooltip {
+    font-size: 0.8em;
+    color: #666;
+    display: block;
+    margin-top: 5px;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+header {
+    background: #333;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+main {
+    padding: 20px;
+}
+
+#search-and-filters {
+    margin-bottom: 20px;
+}
+
+#search {
+    margin-bottom: 10px;
+}
+
+#search label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#search input {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#search .tooltip {
+    font-size: 0.8em;
+    color: #666;
+    display: block;
+    margin-top: 5px;
+}
+
+#toggleFiltersBtn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    font-size: 1em;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+#toggleFiltersBtn[aria-expanded="true"] .fa-caret-down {
+    transform: rotate(180deg);
+}
+
+#toggleFiltersBtn:hover {
+    background: #0056b3;
+}
+
+#filters {
+    background: #f9f9f9;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+#filters.hidden {
+    display: none;
+}
+
+#filters label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+#filters input,
+#filters select {
+    width: 100%;
+    max-width: 200px;
+    padding: 6px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#filters button {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#filters button:hover {
+    background: #218838;
+}
+
+#stats {
+    margin-bottom: 15px;
+}
+
+#stats p {
+    margin: 5px 0;
+}
+
+.match-count {
+    font-size: 0.9em;
+    color: #666;
+    margin-left: 10px;
+}
+
+/* Existing results styles assumed; adding input-specific styles */
+header {
+    background: #333;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+main {
+    padding: 20px;
+}
+
+.input-group {
+    margin-bottom: 15px;
+}
+
+.input-group input {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.input-group button {
+    margin-top: 5px;
+    padding: 8px 12px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.input-group button:hover {
+    background: #0056b3;
+}
+
+.tooltip {
+    font-size: 0.8em;
+    color: #666;
+    display: block;
+    margin-top: 5px;
+}
+
+.button-group button {
+    padding: 8px 12px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.button-group button:hover {
+    background: #c82333;
+}
+
+#status {
+    margin-top: 15px;
+}
+
+.hidden {
+    display: none;
 }
