@@ -1,23 +1,52 @@
 // src/client/components/Header.js
-export default function renderHeader() {
-  const header = document.createElement('header');
+import { HeaderButtons } from './HeaderButtons.js';
 
-  const pathname = window.location.pathname;
-  const isResultsPage = pathname === '/results';
-  header.innerHTML = `
-    <h1>Sitemap Explorer</h1>
-    <div class="header-controls">
-    <div class="export-buttons">
-      ${isResultsPage ? `
-        <button id="backBtn"><i class="fas fa-arrow-left"></i> Back</button>
-        <button id="exportHtmlBtn" disabled><i class="fas fa-file-code"></i> Export HTML</button>
-        <button id="exportCsvBtn" disabled><i class="fas fa-file-csv"></i> Export CSV</button>
-        <button id="exportJsonBtn" disabled><i class="fas fa-file-export"></i> Export JSON</button>` : ''}
-    </div>
-      <button id="themeToggleBtn" aria-label="Toggle dark mode"><i class="fas fa-moon"></i></button>
-       <span class="version">v1.0</span>
-    </div>
-  `;
+export class Header {
+  constructor(container, options = {}) {
+    this.container = container;
+    this.options = {
+      onBack: options.onBack || (() => {}),
+      onToggleFilters: options.onToggleFilters || (() => {}),
+      treeView: options.treeView || null,
+      urls: options.urls || [],
+      ...options,
+    };
+    this.path = window.location.pathname;
+    this.render();
+  }
 
-  return header;
+  render() {
+    this.container.innerHTML = `
+      <h1>Sitemap Explorer</h1>
+      <div class="controls"></div>
+    `;
+    const controlsContainer = this.container.querySelector('.controls');
+    this.buttons = new HeaderButtons(controlsContainer, {
+      onBack: this.options.onBack,
+      onToggleFilters: this.options.onToggleFilters,
+      treeView: this.options.treeView,
+      urls: this.options.urls,
+      path: this.path,
+    });
+  }
+
+  updateRoute(newPath) {
+    this.path = newPath;
+    this.buttons.updateRoute(newPath);
+  }
+
+  updateUrls(newUrls) {
+    this.options.urls = newUrls;
+    this.buttons.updateUrls(newUrls);
+  }
+
+  updateOptions(newOptions) {
+    this.options = { ...this.options, ...newOptions };
+    this.buttons.updateOptions({
+      onBack: this.options.onBack,
+      onToggleFilters: this.options.onToggleFilters,
+      treeView: this.options.treeView,
+      urls: this.options.urls,
+    });
+  }
 }

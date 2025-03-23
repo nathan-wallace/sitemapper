@@ -1,18 +1,10 @@
+// src/client/pages/ResultsPage.js
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 import { TreeView } from '../components/TreeView.js';
+import { route, headerInstance } from '../index.js';
 
 export default function setupResultsPage(container) {
-  const section = document.createElement('section');
-  section.innerHTML = `
-    <div class="controls">
-      <button id="backBtn"><i class="fas fa-arrow-left"></i> Back</button>
-      <button id="collapseAllBtn"><i class="fas fa-compress-alt"></i> Collapse All</button>
-      <button id="exportHtmlBtn" disabled><i class="fas fa-file-code"></i> Export HTML</button>
-      <button id="exportCsvBtn" disabled><i class="fas fa-file-csv"></i> Export CSV</button>
-      <button id="exportJsonBtn" disabled><i class="fas fa-file-code"></i> Export JSON</button>
-      <button id="themeToggleBtn"><i class="fas fa-moon"></i> Toggle Theme</button>
-      <button id="toggleFiltersBtn" aria-expanded="false"><i class="fas fa-filter"></i> Filters</button>
-    </div>
+  container.innerHTML = `
     <div id="filters" class="hidden">
       <label for="priorityFilter">Min Priority:</label>
       <input type="number" id="priorityFilter" min="0" max="1" step="0.1" value="0" />
@@ -43,10 +35,9 @@ export default function setupResultsPage(container) {
       <div id="error" class="hidden"></div>
     </div>
   `;
-  container.appendChild(section);
 
-  const treeContainer = section.querySelector('#tree');
-  let treeView = new TreeView(treeContainer);
+  const treeContainer = container.querySelector('#tree');
+  const treeView = new TreeView(treeContainer);
   let originalUrls = [];
 
   const loadSitemapData = async () => {
@@ -70,9 +61,9 @@ export default function setupResultsPage(container) {
       treeView.render(originalUrls);
       showLoading(100);
       showFeedback(`Loaded ${data.urlCount} URLs`);
-      section.querySelector('#totalUrls').textContent = data.urlCount;
-      section.querySelector('#uniqueDomains').textContent = new Set(originalUrls.map(u => new URL(u.loc).hostname)).size;
-      section.querySelectorAll('#exportHtmlBtn, #exportCsvBtn, #exportJsonBtn').forEach(btn => btn.disabled = false);
+      container.querySelector('#totalUrls').textContent = data.urlCount;
+      container.querySelector('#uniqueDomains').textContent = new Set(originalUrls.map(u => new URL(u.loc).hostname)).size;
+      headerInstance.updateUrls(originalUrls); // Update header directly
     } catch (err) {
       showError(err.message);
     } finally {
@@ -80,71 +71,28 @@ export default function setupResultsPage(container) {
     }
   };
 
-  section.querySelector('#backBtn').addEventListener('click', () => {
-    window.history.pushState({}, '', '/');
-    renderLayout();
-    route('/');
-  });
-
-  section.querySelector('#collapseAllBtn').addEventListener('click', () => {
-    treeView.toggleExpansion();
-    section.querySelector('#collapseAllBtn').innerHTML = treeView.isExpanded 
-      ? '<i class="fas fa-compress-alt"></i> Collapse All' 
-      : '<i class="fas fa-expand-alt"></i> Expand All';
-  });
-
-  section.querySelector('#exportHtmlBtn').addEventListener('click', () => {
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html><body><h1>Sitemap URLs</h1><ul>
-      ${originalUrls.map(url => `<li><a href="${url.loc}">${url.loc}</a> (Last Modified: ${url.lastmod})</li>`).join('')}
-      </ul></body></html>`;
-    downloadFile(htmlContent, 'sitemap.html', 'text/html');
-  });
-
-  section.querySelector('#exportCsvBtn').addEventListener('click', () => {
-    const csvContent = 'URL,Last Modified,Change Frequency,Priority\n' +
-      originalUrls.map(url => `"${url.loc}","${url.lastmod}","${url.changefreq}","${url.priority}"`).join('\n');
-    downloadFile(csvContent, 'sitemap.csv', 'text/csv');
-  });
-
-  section.querySelector('#exportJsonBtn').addEventListener('click', () => {
-    const jsonContent = JSON.stringify(originalUrls, null, 2);
-    downloadFile(jsonContent, 'sitemap.json', 'application/json');
-  });
-
-  section.querySelector('#themeToggleBtn').addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-  });
-
-  section.querySelector('#toggleFiltersBtn').addEventListener('click', () => {
-    const isExpanded = section.querySelector('#toggleFiltersBtn').getAttribute('aria-expanded') === 'true';
-    section.querySelector('#toggleFiltersBtn').setAttribute('aria-expanded', !isExpanded);
-    section.querySelector('#filters').classList.toggle('hidden');
-  });
-
-  section.querySelector('#applyFiltersBtn').addEventListener('click', () => {
+  container.querySelector('#applyFiltersBtn').addEventListener('click', () => {
     const filter = {
-      priority: section.querySelector('#priorityFilter').value,
-      lastmod: section.querySelector('#lastmodFilter').value,
+      priority: container.querySelector('#priorityFilter').value,
+      lastmod: container.querySelector('#lastmodFilter').value,
     };
-    const sortBy = section.querySelector('#sortBy').value;
+    const sortBy = container.querySelector('#sortBy').value;
     treeView.render(originalUrls, filter, sortBy);
     const filteredCount = treeContainer.querySelectorAll('li').length;
-    section.querySelector('#matchCount').textContent = `(${filteredCount} of ${originalUrls.length} URLs)`;
+    container.querySelector('#matchCount').textContent = `(${filteredCount} of ${originalUrls.length} URLs)`;
   });
 
-  section.querySelector('#resetFiltersBtn').addEventListener('click', () => {
-    section.querySelector('#priorityFilter').value = '0';
-    section.querySelector('#lastmodFilter').value = '';
-    section.querySelector('#sortBy').value = 'url';
-    section.querySelector('#urlSearch').value = '';
+  container.querySelector('#resetFiltersBtn').addEventListener('click', () => {
+    container.querySelector('#priorityFilter').value = '0';
+    container.querySelector('#lastmodFilter').value = '';
+    container.querySelector('#sortBy').value = 'url';
+    container.querySelector('#urlSearch').value = '';
     treeView.render(originalUrls);
-    section.querySelector('#matchCount').textContent = '';
+    container.querySelector('#matchCount').textContent = '';
   });
 
-  section.querySelector('#urlSearch').addEventListener('input', () => {
-    const searchTerm = section.querySelector('#urlSearch').value.toLowerCase();
+  container.querySelector('#urlSearch').addEventListener('input', () => {
+    const searchTerm = container.querySelector('#urlSearch').value.toLowerCase();
     treeContainer.querySelectorAll('span').forEach(span => {
       span.classList.remove('highlight');
       if (searchTerm && span.textContent.toLowerCase().includes(searchTerm)) {
@@ -164,14 +112,12 @@ export default function setupResultsPage(container) {
   });
 
   loadSitemapData();
-}
 
-function downloadFile(content, fileName, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  return {
+    treeView,
+    onToggleFilters: (isExpanded) => {
+      container.querySelector('#filters').classList.toggle('hidden', !isExpanded);
+    },
+    urls: originalUrls,
+  };
 }

@@ -1,9 +1,9 @@
 // src/client/pages/InputPage.js
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
+import { route } from '../index.js';
 
 export default function setupInputPage(container) {
-  const section = document.createElement('section');
-  section.innerHTML = `
+  container.innerHTML = `
     <h2>Load Sitemap</h2>
     <form id="sitemapUrlForm" method="POST" class="input-group">
       <label for="sitemapUrlInput">Enter Sitemap URL:</label>
@@ -27,12 +27,11 @@ export default function setupInputPage(container) {
       <div id="error" class="hidden"></div>
     </div>
   `;
-  container.appendChild(section);
 
-  const sitemapUrlForm = section.querySelector('#sitemapUrlForm');
-  const sitemapUrlInput = section.querySelector('#sitemapUrlInput');
-  const sitemapUploadForm = section.querySelector('#sitemapUploadForm');
-  const clearCacheBtn = section.querySelector('#clearCacheBtn');
+  const sitemapUrlForm = container.querySelector('#sitemapUrlForm');
+  const sitemapUrlInput = container.querySelector('#sitemapUrlInput');
+  const sitemapUploadForm = container.querySelector('#sitemapUploadForm');
+  const clearCacheBtn = container.querySelector('#clearCacheBtn');
 
   sitemapUrlForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -52,7 +51,6 @@ export default function setupInputPage(container) {
         const { id } = await response.json();
         showLoading(50);
         window.history.pushState({}, '', `/results?id=${id}`);
-        renderLayout();
         route('/results');
         showFeedback('Sitemap loaded successfully');
       } catch (err) {
@@ -79,7 +77,6 @@ export default function setupInputPage(container) {
       const { id } = await response.json();
       showLoading(50);
       window.history.pushState({}, '', `/results?id=${id}`);
-      renderLayout();
       route('/results');
       showFeedback('Sitemap uploaded successfully');
     } catch (err) {
@@ -102,4 +99,6 @@ export default function setupInputPage(container) {
       hideLoading();
     }
   });
+
+  return {};
 }

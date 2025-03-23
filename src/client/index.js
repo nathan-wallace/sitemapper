@@ -1,34 +1,57 @@
 // src/client/index.js
 import setupInputPage from './pages/InputPage.js';
 import setupResultsPage from './pages/ResultsPage.js';
-import './styles/styles.css';
+import { Header } from './components/Header.js';
 
-const mainEl = document.getElementById('main');
-if (!mainEl) {
-  console.error('Main element not found');
-}
-
-function renderLayout() {
-  document.getElementById('header')?.remove();
-  const header = document.createElement('header');
-  header.innerHTML = '<h1>Sitemap Explorer</h1>';
-  document.body.prepend(header);
-}
+let mainEl = null;
+let headerInstance = null;
 
 function route(path) {
+  if (!mainEl) {
+    console.error('Main element not initialized yet');
+    return;
+  }
+  console.log('Routing to:', path);
   mainEl.innerHTML = '';
+  let headerOptions = {};
+
   switch (path) {
     case '/':
-      setupInputPage(mainEl);
+      headerOptions = setupInputPage(mainEl);
       break;
     case '/results':
-      setupResultsPage(mainEl);
+      headerOptions = setupResultsPage(mainEl);
       break;
     default:
       mainEl.innerHTML = '<h2>404 - Page not found</h2>';
   }
+
+  if (headerInstance) {
+    headerInstance.updateRoute(path);
+    if (headerOptions.urls) headerInstance.updateUrls(headerOptions.urls);
+    if (headerOptions.treeView || headerOptions.onToggleFilters) {
+      headerInstance.updateOptions({
+        treeView: headerOptions.treeView,
+        onToggleFilters: headerOptions.onToggleFilters,
+      });
+    }
+  }
 }
 
-window.addEventListener('popstate', () => route(window.location.pathname));
-renderLayout();
-route(window.location.pathname);
+document.addEventListener('DOMContentLoaded', () => {
+  const appContainer = document.getElementById('app');
+  mainEl = document.getElementById('view');
+  if (!mainEl || !appContainer) {
+    console.error('Required elements (#app or #view) not found in index.html');
+    return;
+  }
+
+  const headerContainer = document.createElement('header');
+  appContainer.insertBefore(headerContainer, mainEl);
+  headerInstance = new Header(headerContainer);
+
+  route(window.location.pathname);
+  window.addEventListener('popstate', () => route(window.location.pathname));
+});
+
+export { route, headerInstance };
