@@ -1,4 +1,5 @@
-import { showLoading, hideLoading, showError } from '../utils/dom.js';
+// src/client/pages/InputPage.js
+import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 
 export default function setupInputPage(container) {
   const section = document.createElement('section');
@@ -37,7 +38,7 @@ export default function setupInputPage(container) {
     e.preventDefault();
     const url = sitemapUrlInput.value.trim();
     if (url) {
-      showLoading();
+      showLoading(10);
       try {
         const response = await fetch('/sitemap/url', {
           method: 'POST',
@@ -49,9 +50,11 @@ export default function setupInputPage(container) {
           throw new Error(errorData.error || 'Failed to fetch sitemap');
         }
         const { id } = await response.json();
+        showLoading(50);
         window.history.pushState({}, '', `/results?id=${id}`);
         renderLayout();
         route('/results');
+        showFeedback('Sitemap loaded successfully');
       } catch (err) {
         showError(err.message);
       } finally {
@@ -63,7 +66,7 @@ export default function setupInputPage(container) {
   sitemapUploadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(sitemapUploadForm);
-    showLoading();
+    showLoading(10);
     try {
       const response = await fetch('/sitemap/upload', {
         method: 'POST',
@@ -74,9 +77,11 @@ export default function setupInputPage(container) {
         throw new Error(errorData.error || 'Failed to upload sitemap');
       }
       const { id } = await response.json();
+      showLoading(50);
       window.history.pushState({}, '', `/results?id=${id}`);
       renderLayout();
       route('/results');
+      showFeedback('Sitemap uploaded successfully');
     } catch (err) {
       showError(err.message);
     } finally {
@@ -84,12 +89,17 @@ export default function setupInputPage(container) {
     }
   });
 
-  clearCacheBtn.addEventListener('click', () => {
-    fetch('/sitemap/clear-cache', { method: 'POST' })
-      .then((response) => response.text())
-      .then(() => {
-        window.location.reload();
-      })
-      .catch((err) => console.error('Clear cache error:', err));
+  clearCacheBtn.addEventListener('click', async () => {
+    showLoading();
+    try {
+      const response = await fetch('/sitemap/clear-cache', { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to clear cache');
+      showFeedback('Cache cleared successfully');
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      hideLoading();
+    }
   });
 }
