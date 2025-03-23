@@ -51,24 +51,20 @@ export default function setupResultsPage(container) {
   showLoading();
 
   fetch(`/results-data?id=${id}`)
-    .then((res) => {
-      if (!res.ok) {
-        throw new Error('Failed to load results data.');
-      }
-      return res.json();
-    })
-    .then((data) => {
-      hideLoading();
-      if (!Array.isArray(data.urls) || data.urls.length === 0) {
-        showError('No results found.');
-        return;
-      }
-
-      originalUrls = data.urls;
-      const treeContainer = section.querySelector('#treeView');
-
-      currentTree = new TreeView(treeContainer);
-      currentTree.render(originalUrls);
+  .then((res) => {
+    if (!res.ok) throw new Error('Failed to load results');
+    return res.json();
+  })
+  .then((data) => {
+    hideLoading();
+    console.log('Results data:', data); // Debug
+    if (!Array.isArray(data.urls) || data.urls.length === 0) {
+      showError('No URLs found');
+      return;
+    }
+    originalUrls = data.urls;
+    currentTree = new TreeView(treeContainer);
+    currentTree.render(originalUrls);
 
       // Attach export button listeners after data is loaded
       renderExportButtons({

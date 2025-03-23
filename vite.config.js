@@ -8,8 +8,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/sitemap': 'http://localhost:4000',
-      '/health': 'http://localhost:4000'
+      '/sitemap': 'http://localhost:3000',
+      '/health': 'http://localhost:3000'
     }
   }
 });

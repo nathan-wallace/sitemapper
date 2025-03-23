@@ -1,24 +1,22 @@
+import { showLoading, hideLoading, showError } from '../utils/dom.js';
+
 export default function setupInputPage(container) {
   const section = document.createElement('section');
   section.innerHTML = `
     <h2>Load Sitemap</h2>
-
     <form id="sitemapUrlForm" method="POST" class="input-group">
       <label for="sitemapUrlInput">Enter Sitemap URL:</label>
       <input type="text" id="sitemapUrlInput" name="url" placeholder="https://example.com/sitemap.xml" />
       <button type="submit">Load Sitemap</button>
     </form>
-
     <form id="sitemapUploadForm" method="POST" enctype="multipart/form-data" class="input-group">
       <label for="sitemapFile">Upload Sitemap File:</label>
       <input type="file" id="sitemapFile" name="sitemapFile" />
       <button type="submit">Upload</button>
     </form>
-
     <div class="button-group">
       <button id="clearCacheBtn" type="button">Clear Cache</button>
     </div>
-
     <div id="status">
       <div id="loading" class="hidden">
         <progress id="loadProgress" max="100" value="0"></progress>
@@ -35,22 +33,58 @@ export default function setupInputPage(container) {
   const sitemapUploadForm = section.querySelector('#sitemapUploadForm');
   const clearCacheBtn = section.querySelector('#clearCacheBtn');
 
-  sitemapUrlForm?.addEventListener('submit', (e) => {
+  sitemapUrlForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const url = sitemapUrlInput?.value.trim();
+    const url = sitemapUrlInput.value.trim();
     if (url) {
-      sitemapUrlForm.action = '/sitemap/url';
-      sitemapUrlForm.submit();
+      showLoading();
+      try {
+        const response = await fetch('/sitemap/url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch sitemap');
+        }
+        const { id } = await response.json();
+        window.history.pushState({}, '', `/results?id=${id}`);
+        renderLayout();
+        route('/results');
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        hideLoading();
+      }
     }
   });
 
-  sitemapUploadForm?.addEventListener('submit', (e) => {
+  sitemapUploadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    sitemapUploadForm.action = '/sitemap/upload';
-    sitemapUploadForm.submit();
+    const formData = new FormData(sitemapUploadForm);
+    showLoading();
+    try {
+      const response = await fetch('/sitemap/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload sitemap');
+      }
+      const { id } = await response.json();
+      window.history.pushState({}, '', `/results?id=${id}`);
+      renderLayout();
+      route('/results');
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      hideLoading();
+    }
   });
 
-  clearCacheBtn?.addEventListener('click', () => {
+  clearCacheBtn.addEventListener('click', () => {
     fetch('/sitemap/clear-cache', { method: 'POST' })
       .then((response) => response.text())
       .then(() => {

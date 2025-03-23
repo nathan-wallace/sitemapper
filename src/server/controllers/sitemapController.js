@@ -10,40 +10,35 @@ const upload = multer({ dest: config.uploadDir });
 
 router.post('/url', async (req, res) => {
   const { url } = req.body;
-  console.log('Received URL:', url);
   if (!url || !url.match(/^https?:\/\//)) {
-    console.log('Invalid URL:', url);
-    return res.redirect('/?error=' + encodeURIComponent('Invalid URL: Must start with http:// or https://'));
+    return res.status(400).json({ error: 'Invalid URL: Must start with http:// or https://' });
   }
   try {
     const allUrls = await fetchSitemap(url);
     if (allUrls.size === 0) {
-      console.log('No URLs found for:', url);
-      return res.redirect('/?error=' + encodeURIComponent('No sitemaps or URLs found'));
+      return res.status(404).json({ error: 'No sitemaps or URLs found' });
     }
     const urls = Array.from(allUrls).map((u) => JSON.parse(u));
-    console.log(`URLs to cache: ${urls.length}`);
     const id = await saveToCache(urls);
-    console.log(`Processed ${urls.length} URLs for ${url}`);
-    res.redirect(`/results?id=${id}`);
+    res.json({ id }); // Return ID instead of redirect
   } catch (err) {
     console.error('Route /sitemap/url error:', err.message);
-    res.redirect('/?error=' + encodeURIComponent(err.message));
+    res.status(500).json({ error: err.message });
   }
 });
 
 router.post('/upload', upload.single('sitemapFile'), async (req, res) => {
   if (!req.file) {
-    return res.redirect('/?error=' + encodeURIComponent('No file uploaded'));
+    return res.status(400).json({ error: 'No file uploaded' });
   }
   try {
     const urls = await parseSitemapFromFile(req.file.path);
     const urlArray = Array.from(urls).map((u) => JSON.parse(u));
     const id = await saveToCache(urlArray);
-    res.redirect(`/results?id=${id}`);
+    res.json({ id }); // Return ID instead of redirect
   } catch (err) {
     console.error('Route /sitemap/upload error:', err.message);
-    res.redirect('/?error=' + encodeURIComponent(err.message));
+    res.status(500).json({ error: err.message });
   }
 });
 
