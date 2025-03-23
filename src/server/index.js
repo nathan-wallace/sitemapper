@@ -22,7 +22,7 @@ app.use(ensureDirectories);
 
 async function startServer() {
   if (!isProd) {
-    // --- 🧪 DEVELOPMENT: use Vite as middleware ---
+    // Development: Use Vite as middleware
     const vite = await createViteServer({
       server: { middlewareMode: 'html' },
       root: path.resolve(__dirname, '../client'),
@@ -33,8 +33,9 @@ async function startServer() {
     app.get('*', async (req, res, next) => {
       try {
         const url = req.originalUrl;
-        let template = await vite.transformIndexHtml(url, 
-          await vite.pluginContainer.load(url)
+        let template = await vite.transformIndexHtml(
+          url,
+          '<!DOCTYPE html><html><head><title>Sitemap Explorer</title></head><body><div id="app"></div><script type="module" src="/src/client/index.js"></script></body></html>' // Fallback template
         );
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (err) {
@@ -43,23 +44,34 @@ async function startServer() {
       }
     });
   } else {
-    // --- 🏁 PRODUCTION: serve built static files ---
+    // Production: Serve built static files
     const distPath = path.resolve(__dirname, '../../public');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { index: false })); // Prevent default index serving
 
-    // Handle all non-API routes with the frontend
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, '../../public/index.html'));
+    // Serve index.html for all non-API routes
+    app.get('*', (req, res, next) => {
+      const apiRoutes = ['/sitemap', '/health', '/cache'];
+      if (apiRoutes.some(route => req.path.startsWith(route))) {
+        return next(); // Skip to next middleware for API routes
+      }
+      console.debug('Serving index.html for path:', req.path);
+      res.sendFile(path.join(distPath, 'index.html'), (err) => {
+        if (err) {
+          console.error('Error serving index.html:', err);
+          res.status(500).send('Server error');
+        }
+      });
     });
   }
 
+  // Error handling middleware
   app.use((err, req, res, next) => {
     console.error('Server error:', err.stack);
     res.status(500).json({ error: 'Internal server error', details: err.message });
   });
 
   app.listen(config.port, () => {
-    console.log(`Server running at http://localhost:${config.port}`);
+    console.log(`Server running at http://localhost:${config.port} in ${isProd ? 'production' : 'development'} mode`);
   });
 }
 

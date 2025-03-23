@@ -1,4 +1,3 @@
-// src/client/components/Header.js
 import { HeaderButtons } from './HeaderButtons.js';
 
 export class Header {
@@ -9,9 +8,11 @@ export class Header {
       onToggleFilters: options.onToggleFilters || (() => {}),
       treeView: options.treeView || null,
       urls: options.urls || [],
+      destroy: options.destroy || (() => {}), // Cleanup function from pages
       ...options,
     };
     this.path = window.location.pathname;
+    this.buttons = null;
     this.render();
   }
 
@@ -23,8 +24,6 @@ export class Header {
     const controlsContainer = this.container.querySelector('.controls');
     this.buttons = new HeaderButtons(controlsContainer, {
       onBack: this.options.onBack,
-      onToggleFilters: this.options.onToggleFilters,
-      treeView: this.options.treeView,
       urls: this.options.urls,
       path: this.path,
     });
@@ -41,12 +40,24 @@ export class Header {
   }
 
   updateOptions(newOptions) {
+    if (this.options.destroy) {
+      this.options.destroy(); // Clean up previous page
+    }
     this.options = { ...this.options, ...newOptions };
     this.buttons.updateOptions({
       onBack: this.options.onBack,
-      onToggleFilters: this.options.onToggleFilters,
-      treeView: this.options.treeView,
       urls: this.options.urls,
     });
+    this.render();
+  }
+
+  destroy() {
+    if (this.buttons) {
+      this.buttons.destroy();
+    }
+    if (this.options.destroy) {
+      this.options.destroy();
+    }
+    this.container.innerHTML = '';
   }
 }
