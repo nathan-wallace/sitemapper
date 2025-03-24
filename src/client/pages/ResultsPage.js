@@ -1,7 +1,7 @@
 // src/client/pages/ResultsPage.js
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
-import { TreeView } from '../components/TreeView.js';
-import { DiagramView } from '../components/DiagramView.js';
+import { TreeView } from '../components/TreeView/TreeView.js';
+import { DiagramView } from '../components/DiagramView/DiagramView.js';
 import { Filters } from '../components/Filters.js';
 import { headerInstance } from '../index.js';
 

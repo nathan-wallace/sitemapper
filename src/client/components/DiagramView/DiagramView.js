@@ -1,6 +1,6 @@
 // src/client/components/DiagramView.js
 import * as d3 from 'd3';
-import { showLoading, hideLoading } from '../utils/dom.js';
+import { showLoading, hideLoading } from '../../utils/dom.js';
 
 function throttle(fn, limit) {
   let inThrottle;
