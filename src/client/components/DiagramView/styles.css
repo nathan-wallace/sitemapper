@@ -84,9 +84,9 @@
   }
   
   svg .node text.folder-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    fill: #fff;
+    fill: #333;
     cursor: default;
     pointer-events: none;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -100,9 +100,14 @@
     stroke: #4b5563;
   }
   
-  .dark-mode svg .node .folder-icon path {
+  .dark-mode svg .node .folder-icon path[fill="#5a9cff"] {
     fill: #60a5fa;
     stroke: #2563eb;
+  }
+  
+  .dark-mode svg .node .folder-icon path[fill="#ff9f43"] {
+    fill: #f59e0b;
+    stroke: #d97706;
   }
   
   .dark-mode svg .node text.folder-label {
@@ -138,6 +143,91 @@
     display: none !important;
   }
   
+  /* Node Modal */
+  .node-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .node-modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  .node-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    transition: color 0.2s ease;
+  }
+  
+  .node-modal-close:hover {
+    color: #333;
+  }
+  
+  .node-modal-content h3 {
+    margin: 0 0 15px;
+    font-size: 18px;
+    color: #333;
+  }
+  
+  .node-modal-content p {
+    margin: 8px 0;
+    font-size: 14px;
+    color: #555;
+  }
+  
+  .node-modal-content a {
+    color: #007bff;
+    text-decoration: none;
+  }
+  
+  .node-modal-content a:hover {
+    text-decoration: underline;
+  }
+  
+  .dark-mode .node-modal-content {
+    background: #1f2937;
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content h3 {
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content p {
+    color: #d1d5db;
+  }
+  
+  .dark-mode .node-modal-close {
+    color: #9ca3af;
+  }
+  
+  .dark-mode .node-modal-close:hover {
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content a {
+    color: #60a5fa;
+  }
+  
   /* Responsive Design */
   @media (max-width: 768px) {
     #diagram {
@@ -160,5 +250,10 @@
     .diagram-controls {
       top: 5px;
       right: 5px;
+    }
+  
+    .node-modal-content {
+      width: 95%;
+      padding: 15px;
     }
   }

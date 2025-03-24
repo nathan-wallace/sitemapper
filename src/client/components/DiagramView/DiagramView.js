@@ -135,36 +135,51 @@ export class DiagramView {
   }
 
   buildTree(urls) {
-    const root = { name: 'Sitemap', children: [] };
+    const root = { name: 'Sitemap', fullPath: '', children: [], shownCount: 9 };
     const pathMap = new Map();
 
     urls.forEach(url => {
       try {
         const urlObj = new URL(url.loc || '');
         const hostname = urlObj.hostname;
-        const pathSegments = urlObj.pathname.split('/').filter(Boolean); // Remove empty segments
+        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
 
         let currentNode = root;
         let fullPath = hostname;
 
-        // Ensure domain node exists
         if (!pathMap.has(hostname)) {
-          const domainNode = { name: hostname, children: [], url: null };
+          const domainNode = { name: hostname, fullPath: hostname, children: [], url: null, shownCount: 9 };
           root.children.push(domainNode);
           pathMap.set(hostname, domainNode);
         }
         currentNode = pathMap.get(hostname);
 
-        // Build deeper hierarchy based on path segments
         pathSegments.forEach((segment, index) => {
           fullPath += `/${segment}`;
           if (!pathMap.has(fullPath)) {
             const newNode = { 
               name: segment, 
+              fullPath, 
               children: [], 
-              url: index === pathSegments.length - 1 ? url : null 
+              url: index === pathSegments.length - 1 ? url : null,
+              shownCount: 9 
             };
-            currentNode.children.push(newNode);
+            if (currentNode.children.length < currentNode.shownCount) {
+              currentNode.children.push(newNode);
+            } else if (!currentNode.moreNode) {
+              currentNode.moreNode = { 
+                name: 'More...', 
+                fullPath: `${currentNode.fullPath}/more`, 
+                children: [], 
+                isMore: true, 
+                hiddenChildren: [],
+                shownCount: 0 
+              };
+              currentNode.children.push(currentNode.moreNode);
+            }
+            if (currentNode.moreNode) {
+              currentNode.moreNode.hiddenChildren.push(newNode);
+            }
             pathMap.set(fullPath, newNode);
           }
           currentNode = pathMap.get(fullPath);
@@ -290,17 +305,24 @@ export class DiagramView {
         this.zoomToNode(d);
       })
       .on('click', (event, d) => {
-        if (d.data.url) window.open(d.data.url.loc, '_blank');
+        if (d.data.isMore) {
+          this.expandMoreNode(d);
+        } else {
+          this.showNodeModal(d.data); // Show modal for normal nodes
+        }
       });
 
     nodeEnter.append('svg')
-      .attr('width', 36)
-      .attr('height', 36)
-      .attr('x', -18)
-      .attr('y', -18)
+      .attr('width', 60)
+      .attr('height', 60)
+      .attr('x', -30)
+      .attr('y', -30)
       .attr('class', 'folder-icon')
-      .html(`
-        <path d="M4 8v20h28V12H18l-4-4H4zm10 0l4 4h10v12H8V8h6z" fill="#5a9cff" stroke="#2b6cb0" stroke-width="1.5"/>
+      .html(d => `
+        <path d="M4 8v20h28V12H18l-4-4H4zm10 0l4 4h10v12H8V8h6z" 
+              fill="${d.data.isMore ? '#ff9f43' : '#5a9cff'}" 
+              stroke="${d.data.isMore ? '#e67e22' : '#2b6cb0'}" 
+              stroke-width="1.5"/>
       `);
 
     nodeEnter.append('text')
@@ -308,7 +330,12 @@ export class DiagramView {
       .attr('y', 0)
       .attr('text-anchor', 'middle')
       .attr('class', 'folder-label')
-      .text(d => d.data.name.length > 12 ? `${d.data.name.slice(0, 9)}...` : d.data.name);
+      .text(d => {
+        const path = d.data.fullPath || d.data.name;
+        const segments = path.split('/').filter(Boolean);
+        const label = segments[segments.length - 1];
+        return label.length > 12 ? `${label.slice(0, 9)}...` : label;
+      });
 
     nodeEnter.append('title')
       .text(d => this.formatTooltip(d.data));
@@ -325,6 +352,78 @@ export class DiagramView {
       .remove();
 
     root.each(d => { d.x0 = d.x; d.y0 = d.y; });
+    return root;
+  }
+
+  expandMoreNode(d) {
+    const parentData = d.parent.data;
+    const moreNodeIndex = parentData.children.findIndex(child => child.isMore);
+    if (moreNodeIndex === -1) return;
+
+    const moreNode = parentData.moreNode;
+    const currentShown = parentData.children.length - 1;
+    const nextShown = Math.min(currentShown * 2, currentShown + moreNode.hiddenChildren.length);
+    const nodesToAdd = moreNode.hiddenChildren.splice(0, nextShown - currentShown);
+
+    parentData.children.splice(moreNodeIndex, 1, ...nodesToAdd);
+    if (moreNode.hiddenChildren.length > 0) {
+      moreNode.shownCount = nextShown;
+      parentData.children.push(moreNode);
+    } else {
+      delete parentData.moreNode;
+    }
+
+    const root = d3.hierarchy(this.treeData);
+    this.g.datum(root);
+    const updatedRoot = this.update(root);
+
+    const newNodeIds = nodesToAdd.map(node => node.fullPath);
+    const newNodes = updatedRoot.descendants().filter(node => 
+      newNodeIds.includes(node.data.fullPath)
+    );
+
+    if (newNodes.length > 0) {
+      this.zoomToNodes(newNodes);
+    } else {
+      this.fitToView(updatedRoot);
+    }
+  }
+
+  showNodeModal(data) {
+    // Remove existing modal if any
+    const existingModal = document.querySelector('.node-modal');
+    if (existingModal) existingModal.remove();
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'node-modal';
+    modal.innerHTML = `
+      <div class="node-modal-content">
+        <span class="node-modal-close">&times;</span>
+        <h3>Node Details</h3>
+        <p><strong>Path:</strong> ${data.fullPath || data.name}</p>
+        ${data.url ? `
+          <p><strong>Full URL:</strong> <a href="${data.url.loc}" target="_blank">${data.url.loc}</a></p>
+          ${data.url.lastmod ? `<p><strong>Last Modified:</strong> ${data.url.lastmod}</p>` : ''}
+          ${data.url.changefreq ? `<p><strong>Change Frequency:</strong> ${data.url.changefreq}</p>` : ''}
+          ${data.url.priority ? `<p><strong>Priority:</strong> ${data.url.priority}</p>` : ''}
+        ` : ''}
+        ${data.children && data.children.length > 0 ? `<p><strong>Child Nodes:</strong> ${data.children.length}</p>` : ''}
+        <p><strong>Depth:</strong> ${data.fullPath ? data.fullPath.split('/').filter(Boolean).length : 0}</p>
+      </div>
+    `;
+
+    // Append to body (or container if preferred)
+    document.body.appendChild(modal);
+
+    // Close modal on click
+    const closeBtn = modal.querySelector('.node-modal-close');
+    closeBtn.addEventListener('click', () => modal.remove());
+
+    // Close modal on outside click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
   }
 
   diagonal(s, d) {
@@ -335,16 +434,21 @@ export class DiagramView {
   }
 
   formatTooltip(data) {
-    let output = `Name: ${data.name}`;
+    let output = `Path: ${data.fullPath || data.name}`;
     if (data.url) {
-      output += `\nURL: ${data.url.loc}`;
+      output += `\nFull URL: ${data.url.loc}`;
       if (data.url.lastmod) output += `\nLast Modified: ${data.url.lastmod}`;
       if (data.url.changefreq) output += `\nChange Frequency: ${data.url.changefreq}`;
       if (data.url.priority) output += `\nPriority: ${data.url.priority}`;
     }
     if (data.children && data.children.length > 0) {
-      output += `\nChildren: ${data.children.length}`;
+      output += `\nChild Nodes: ${data.children.length}`;
     }
+    if (data.isMore && data.hiddenChildren) {
+      output += `\nRemaining Hidden Items: ${data.hiddenChildren.length}`;
+      output += `\nCurrently Shown: ${data.shownCount}`;
+    }
+    output += `\nDepth: ${data.fullPath ? data.fullPath.split('/').filter(Boolean).length : 0}`;
     return output;
   }
 
@@ -358,6 +462,34 @@ export class DiagramView {
     this.svg.transition().duration(750).call(
       this.zoomBehavior.transform,
       d3.zoomIdentity.translate(x, y).scale(scale)
+    );
+    this.zoomLevel = scale;
+  }
+
+  zoomToNodes(nodes) {
+    if (!this.svg || !this.zoomBehavior || !this.g || nodes.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.forEach(node => {
+      minX = Math.min(minX, node.x);
+      maxX = Math.max(maxX, node.x);
+      minY = Math.min(minY, node.y);
+      maxY = Math.max(maxY, node.y);
+    });
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const scaleX = (this.width - 120) / (width || 1);
+    const scaleY = (this.height - 80) / (height || 1);
+    const scale = Math.min(scaleX, scaleY, 1.5) * 0.9;
+    const tx = this.width / 2 - (minX + width / 2) * scale;
+    const ty = this.height / 2 - (minY + height / 2) * scale;
+
+    console.log('Zooming to new nodes - Bounds:', { minX, maxX, minY, maxY }, 'Scale:', scale);
+
+    this.svg.transition().duration(750).call(
+      this.zoomBehavior.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(scale)
     );
     this.zoomLevel = scale;
   }
@@ -428,6 +560,7 @@ export class DiagramView {
     }
     this.cleanupListeners();
     this.container.innerHTML = '';
+    document.querySelector('.node-modal')?.remove(); // Clean up modal
     this.svg = null;
     this.g = null;
     this.zoomBehavior = null;
