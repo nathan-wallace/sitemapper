@@ -45,7 +45,7 @@ export class DiagramView {
         <button id="fullscreenBtn" title="Toggle Fullscreen" aria-label="Toggle fullscreen">
           <i class="fa-solid fa-maximize"></i>
         </button>
-      </div>
+        </div>
     `;
     this.container.appendChild(controls);
     this.setupControlListeners();
@@ -199,6 +199,7 @@ export class DiagramView {
       .attr('viewBox', `0 0 ${this.width} ${this.height}`)
       .attr('preserveAspectRatio', 'xMidYMid meet')
       .attr('role', 'tree')
+      .style('background', '#fff')
       .on('dblclick', (event) => {
         if (event.target === this.svg.node()) this.resetView();
       });
@@ -220,15 +221,15 @@ export class DiagramView {
     const hierarchy = d3.hierarchy(this.treeData);
     console.log('Hierarchy Depth:', hierarchy.height, 'Hierarchy:', hierarchy);
     const tree = d3.tree()
-      .size([this.width - 360, this.height - 240]) // Increased margins for spacing
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth); // Increased separation
+      .size([this.width - margin.left - margin.right, this.height - margin.top - margin.bottom])
+      .separation((a, b) => (a.parent === b.parent ? 1 : 1.5) / a.depth);
 
     const root = tree(hierarchy);
     root.x0 = this.width / 2;
     root.y0 = 0;
 
     this.g.datum(root);
-    this.update(root, true); // Initial layout
+    this.update(root);
     this.fitToView(root);
   }
 
@@ -236,7 +237,6 @@ export class DiagramView {
     if (!this.g) return;
     this.g.attr('transform', event.transform);
     this.zoomLevel = event.transform.k;
-    // No update call here to avoid repositioning during zoom
   }
 
   zoom(factor, clientX = null, clientY = null) {
@@ -259,13 +259,12 @@ export class DiagramView {
     }
   }
 
-  update(source, initial = false) {
-    const duration = initial ? 0 : 750;
+  update(source) {
+    const duration = 750;
     const tree = d3.tree()
-      .size([this.width - 360, this.height - 240])
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth);
-    
-    const root = initial ? tree(source) : source; // Only compute layout initially or on More click
+      .size([this.width - 120, this.height - 80])
+      .separation((a, b) => (a.parent === b.parent ? 1 : 1.5) / a.depth);
+    const root = tree(source);
 
     const link = this.g.selectAll('.link')
       .data(root.links(), d => d.target.id);
@@ -289,11 +288,6 @@ export class DiagramView {
     const node = this.g.selectAll('.node')
       .data(root.descendants(), d => d.id || (d.id = ++this.nodeId));
 
-    const baseSize = 120;
-    const nodeSize = baseSize / this.zoomLevel;
-    const fontSize = Math.max(12, nodeSize / 6);
-    const strokeWidth = Math.max(1.5, nodeSize / 40);
-
     const nodeEnter = node.enter()
       .append('g')
       .attr('class', 'node')
@@ -305,22 +299,22 @@ export class DiagramView {
       .on('click', (event, d) => {
         if (d.data.isMore) {
           this.expandMoreNode(d);
-        } else {
-          this.showNodeModal(d.data);
+        } else if (d.data.url) {
+          window.open(d.data.url.loc, '_blank');
         }
       });
 
     nodeEnter.append('svg')
-      .attr('width', nodeSize)
-      .attr('height', nodeSize)
-      .attr('x', -nodeSize / 2)
-      .attr('y', -nodeSize / 2)
+      .attr('width', 60)
+      .attr('height', 60)
+      .attr('x', -30)
+      .attr('y', -30)
       .attr('class', 'folder-icon')
       .html(d => `
-        <path d="M8 16v40h56V24H36l-8-8H8zm20 0l8 8h20v24H16V16h12z" 
+        <path d="M4 8v20h28V12H18l-4-4H4zm10 0l4 4h10v12H8V8h6z" 
               fill="${d.data.isMore ? '#ff9f43' : '#5a9cff'}" 
               stroke="${d.data.isMore ? '#e67e22' : '#2b6cb0'}" 
-              stroke-width="${strokeWidth}"/>
+              stroke-width="1.5"/>
       `);
 
     nodeEnter.append('text')
@@ -328,12 +322,11 @@ export class DiagramView {
       .attr('y', 0)
       .attr('text-anchor', 'middle')
       .attr('class', 'folder-label')
-      .style('font-size', `${fontSize}px`)
       .text(d => {
         const path = d.data.fullPath || d.data.name;
         const segments = path.split('/').filter(Boolean);
         const label = segments[segments.length - 1];
-        return label.length > 36 ? `${label.slice(0, 33)}...` : label;
+        return label.length > 12 ? `${label.slice(0, 9)}...` : label;
       });
 
     nodeEnter.append('title')
@@ -342,18 +335,7 @@ export class DiagramView {
     const nodeUpdate = node.merge(nodeEnter)
       .transition()
       .duration(duration)
-      .attr('transform', d => `translate(${d.x},${d.y})`)
-      .each(function(d) {
-        d3.select(this).select('.folder-icon')
-          .attr('width', nodeSize)
-          .attr('height', nodeSize)
-          .attr('x', -nodeSize / 2)
-          .attr('y', -nodeSize / 2)
-          .select('path')
-          .attr('stroke-width', strokeWidth);
-        d3.select(this).select('.folder-label')
-          .style('font-size', `${fontSize}px`);
-      });
+      .attr('transform', d => `translate(${d.x},${d.y})`);
 
     node.exit()
       .transition()
@@ -362,7 +344,7 @@ export class DiagramView {
       .remove();
 
     root.each(d => { d.x0 = d.x; d.y0 = d.y; });
-    return root;
+    return root; // Return root for use in expandMoreNode
   }
 
   expandMoreNode(d) {
@@ -371,77 +353,35 @@ export class DiagramView {
     if (moreNodeIndex === -1) return;
 
     const moreNode = parentData.moreNode;
-    const currentShown = parentData.children.length - 1;
+    const currentShown = parentData.children.length - 1; // Subtract "More..." node
     const nextShown = Math.min(currentShown * 2, currentShown + moreNode.hiddenChildren.length);
     const nodesToAdd = moreNode.hiddenChildren.splice(0, nextShown - currentShown);
 
+    // Replace "More..." with new nodes
     parentData.children.splice(moreNodeIndex, 1, ...nodesToAdd);
     if (moreNode.hiddenChildren.length > 0) {
       moreNode.shownCount = nextShown;
-      parentData.children.push(moreNode);
+      parentData.children.push(moreNode); // Re-add "More..." if items remain
     } else {
       delete parentData.moreNode;
     }
 
     const root = d3.hierarchy(this.treeData);
-    const tree = d3.tree()
-      .size([this.width - 360, this.height - 240])
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth);
-    const updatedRoot = tree(root);
-    
-    // Set initial positions for new nodes to parent's last position
+    this.g.datum(root);
+    const updatedRoot = this.update(root);
+
+    // Find the newly added nodes in the updated hierarchy
     const newNodeIds = nodesToAdd.map(node => node.fullPath);
-    updatedRoot.each(node => {
-      if (newNodeIds.includes(node.data.fullPath)) {
-        node.x0 = d.x0;
-        node.y0 = d.y0;
-      }
-    });
-
-    this.g.datum(updatedRoot);
-    this.update(updatedRoot);
-
     const newNodes = updatedRoot.descendants().filter(node => 
       newNodeIds.includes(node.data.fullPath)
     );
 
+    // Zoom to frame the new nodes
     if (newNodes.length > 0) {
       this.zoomToNodes(newNodes);
     } else {
       this.fitToView(updatedRoot);
     }
-  }
-
-  showNodeModal(data) {
-    const existingModal = document.querySelector('.node-modal');
-    if (existingModal) existingModal.remove();
-
-    const modal = document.createElement('div');
-    modal.className = 'node-modal';
-    modal.innerHTML = `
-      <div class="node-modal-content">
-        <span class="node-modal-close">×</span>
-        <h3>Node Details</h3>
-        <p><strong>Path:</strong> ${data.fullPath || data.name}</p>
-        ${data.url ? `
-          <p><strong>Full URL:</strong> <a href="${data.url.loc}" target="_blank">${data.url.loc}</a></p>
-          ${data.url.lastmod ? `<p><strong>Last Modified:</strong> ${data.url.lastmod}</p>` : ''}
-          ${data.url.changefreq ? `<p><strong>Change Frequency:</strong> ${data.url.changefreq}</p>` : ''}
-          ${data.url.priority ? `<p><strong>Priority:</strong> ${data.url.priority}</p>` : ''}
-        ` : ''}
-        ${data.children && data.children.length > 0 ? `<p><strong>Child Nodes:</strong> ${data.children.length}</p>` : ''}
-        <p><strong>Depth:</strong> ${data.fullPath ? data.fullPath.split('/').filter(Boolean).length : 0}</p>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    const closeBtn = modal.querySelector('.node-modal-close');
-    closeBtn.addEventListener('click', () => modal.remove());
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.remove();
-    });
   }
 
   diagonal(s, d) {
@@ -487,6 +427,7 @@ export class DiagramView {
   zoomToNodes(nodes) {
     if (!this.svg || !this.zoomBehavior || !this.g || nodes.length === 0) return;
 
+    // Calculate bounds of the new nodes
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     nodes.forEach(node => {
       minX = Math.min(minX, node.x);
@@ -499,7 +440,7 @@ export class DiagramView {
     const height = maxY - minY;
     const scaleX = (this.width - 120) / (width || 1);
     const scaleY = (this.height - 80) / (height || 1);
-    const scale = Math.min(scaleX, scaleY, 1.5) * 0.9;
+    const scale = Math.min(scaleX, scaleY, 1.5) * 0.9; // Slightly tighter fit
     const tx = this.width / 2 - (minX + width / 2) * scale;
     const ty = this.height / 2 - (minY + height / 2) * scale;
 
@@ -544,7 +485,7 @@ export class DiagramView {
 
   resetView() {
     if (!this.g) return;
-    const root = this.g.datum();
+    const root = d3.hierarchy(this.g.datum());
     this.fitToView(root);
   }
 
@@ -578,7 +519,6 @@ export class DiagramView {
     }
     this.cleanupListeners();
     this.container.innerHTML = '';
-    document.querySelector('.node-modal')?.remove();
     this.svg = null;
     this.g = null;
     this.zoomBehavior = null;

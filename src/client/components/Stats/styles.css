@@ -1,0 +1,157 @@
+/* Reset default margins and paddings for consistency */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Specific selector for the title container within the PageTitle component */
+  #title-container .title-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    width: 100%;
+  }
+  
+  /* Specific selector for the title (light mode) */
+  #title-container .title-container h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #000;
+    white-space: nowrap;
+  }
+  
+  /* Specific selector for the view toggle container (light mode) */
+  #title-container .title-container .view-toggle {
+    display: flex;
+    border: 1px solid #000;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  
+  /* Specific selector for the toggle buttons (light mode) */
+  #title-container .title-container .view-toggle .view-btn {
+    padding: 6px 16px;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #000;
+    background-color: #fff;
+    border: none;
+    border-right: 1px solid #000;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+    margin-right: 0;
+    border-radius: 0;
+  }
+  
+  /* Remove border-right on the last button */
+  #title-container .title-container .view-toggle .view-btn:last-child {
+    border-right: none;
+  }
+  
+  /* Active button state (light mode) */
+  #title-container .title-container .view-toggle .view-btn.active {
+    background-color: #000;
+    color: #fff;
+  }
+  
+  /* Hover state for non-active buttons (light mode) */
+  #title-container .title-container .view-toggle .view-btn:not(.active):hover {
+    background-color: #e0e0e0;
+  }
+  
+  /* Ensure buttons don’t shrink too much */
+  #title-container .title-container .view-toggle .view-btn {
+    white-space: nowrap;
+  }
+  
+  /* Focus state for accessibility (light mode) */
+  #title-container .title-container .view-toggle .view-btn:focus {
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Stats container (light mode) */
+  #stats-container .stats-container {
+    padding: 10px 0;
+    color: #000;
+  }
+  
+  /* Stats paragraphs (light mode) */
+  #stats-container .stats-container p {
+    font-size: 1rem;
+    margin: 5px 0;
+  }
+  
+  /* Stats spans (light mode) */
+  #stats-container .stats-container p span {
+    font-weight: 600;
+  }
+  
+  /* Dark mode styles */
+  @media (prefers-color-scheme: dark), .dark {
+    /* Title in dark mode */
+    #title-container .title-container h2 {
+      color: #fff;
+    }
+  
+    /* View toggle container in dark mode */
+    #title-container .title-container .view-toggle {
+      border: 1px solid #fff;
+    }
+  
+    /* Toggle buttons in dark mode */
+    #title-container .title-container .view-toggle .view-btn {
+      color: #fff;
+      background-color: #333;
+      border-right: 1px solid #fff;
+    }
+  
+    /* Active button state in dark mode */
+    #title-container .title-container .view-toggle .view-btn.active {
+      background-color: #fff;
+      color: #000;
+    }
+  
+    /* Hover state for non-active buttons in dark mode */
+    #title-container .title-container .view-toggle .view-btn:not(.active):hover {
+      background-color: #555;
+    }
+  
+    /* Focus state for accessibility in dark mode */
+    #title-container .title-container .view-toggle .view-btn:focus {
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+    }
+  
+    /* Stats container in dark mode */
+    #stats-container .stats-container {
+      color: #fff;
+    }
+  }
+  
+  /* Responsive adjustments (applies to both light and dark modes) */
+  @media (max-width: 600px) {
+    #title-container .title-container {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 10px;
+    }
+  
+    #title-container .title-container h2 {
+      font-size: 1.25rem;
+    }
+  
+    #title-container .title-container .view-toggle .view-btn {
+      padding: 4px 12px;
+      font-size: 0.9rem;
+    }
+  
+    #title-container .title-container .view-toggle {
+      border-radius: 16px;
+    }
+  
+    #stats-container .stats-container p {
+      font-size: 0.9rem;
+    }
+  }

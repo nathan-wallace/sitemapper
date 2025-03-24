@@ -2,22 +2,16 @@ import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.
 import { TreeView } from '../components/TreeView/TreeView.js';
 import { DiagramView } from '../components/DiagramView/DiagramView.js';
 import { Filters } from '../components/Filters/Filters.js';
+import { PageTitle } from '../components/SitemapTitle/SitemapTitle.js'; // Assuming this is the correct path
+import { Stats } from '../components/Stats/Stats.js';
 import { headerInstance } from '../index.js';
 
 export default function setupResultsPage(container) {
   container.innerHTML = `
-    <h2>Sitemap Scan</h2>
-    <div id="view-toggle">
-      <button id="treeViewBtn" class="view-btn active">Tree View</button>
-      <button id="diagramViewBtn" class="view-btn">Diagram View</button>
-    </div>
+    <div id="title-container"></div>
+    <div id="stats-container"></div>
     <div id="filters-container">
       <div id="filters"></div>
-    </div>
-    <div id="stats">
-      <p>Total URLs: <span id="totalUrls">0</span></p>
-      <p>Unique Domains: <span id="uniqueDomains">0</span></p>
-      <p>Matches: <span id="matchCount"></span></p>
     </div>
     <div id="tree" class="tree"></div>
     <div id="diagram" class="diagram hidden"></div>
@@ -31,10 +25,14 @@ export default function setupResultsPage(container) {
     </div>
   `;
 
+  const titleContainer = container.querySelector('#title-container');
+  const statsContainer = container.querySelector('#stats-container');
   const filtersContainer = container.querySelector('#filters-container');
   const filtersElement = filtersContainer.querySelector('#filters');
   const treeContainer = container.querySelector('#tree');
   const diagramContainer = container.querySelector('#diagram');
+  const pageTitle = new PageTitle(titleContainer);
+  const stats = new Stats(statsContainer);
   const treeView = new TreeView(treeContainer);
   const diagramView = new DiagramView(diagramContainer);
   let originalUrls = [];
@@ -42,6 +40,9 @@ export default function setupResultsPage(container) {
   let currentSortBy = 'url';
   let currentSearchTerm = '';
   let currentView = 'tree';
+
+  pageTitle.render('');
+  stats.render();
 
   const filters = new Filters(filtersElement, {
     onApply: (filter, sortBy) => {
@@ -82,31 +83,33 @@ export default function setupResultsPage(container) {
     const filteredCount = activeContainer.querySelectorAll(
       currentView === 'tree' ? '.url-leaf' : '.node text.url-label'
     ).length;
-    container.querySelector('#matchCount').textContent = `(${filteredCount} of ${originalUrls.length} URLs)`;
+    stats.update({ matchCount: `(${filteredCount} of ${originalUrls.length} URLs)` });
   }
 
-  const treeViewBtn = container.querySelector('#treeViewBtn');
-  const diagramViewBtn = container.querySelector('#diagramViewBtn');
+  function setupViewToggle() {
+    const treeViewBtn = titleContainer.querySelector('#treeViewBtn');
+    const diagramViewBtn = titleContainer.querySelector('#diagramViewBtn');
 
-  treeViewBtn.addEventListener('click', () => {
-    if (currentView !== 'tree') {
-      currentView = 'tree';
-      treeViewBtn.classList.add('active');
-      diagramViewBtn.classList.remove('active');
-      renderCurrentView();
-      updateMatchCount();
-    }
-  });
+    treeViewBtn.addEventListener('click', () => {
+      if (currentView !== 'tree') {
+        currentView = 'tree';
+        treeViewBtn.classList.add('active');
+        diagramViewBtn.classList.remove('active');
+        renderCurrentView();
+        updateMatchCount();
+      }
+    });
 
-  diagramViewBtn.addEventListener('click', () => {
-    if (currentView !== 'diagram') {
-      currentView = 'diagram';
-      diagramViewBtn.classList.add('active');
-      treeViewBtn.classList.remove('active');
-      renderCurrentView();
-      updateMatchCount();
-    }
-  });
+    diagramViewBtn.addEventListener('click', () => {
+      if (currentView !== 'diagram') {
+        currentView = 'diagram';
+        diagramViewBtn.classList.add('active');
+        treeViewBtn.classList.remove('active');
+        renderCurrentView();
+        updateMatchCount();
+      }
+    });
+  }
 
   const loadSitemapData = async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -127,11 +130,17 @@ export default function setupResultsPage(container) {
       originalUrls = data.urls;
       console.log('Loaded URLs:', originalUrls);
       showLoading(50);
+
+      const topLevelDomain = originalUrls.length > 0 ? new URL(originalUrls[0].loc).hostname : 'Unknown';
+      pageTitle.update(topLevelDomain);
+
       renderCurrentView();
       showLoading(100);
       showFeedback(`Loaded ${data.urlCount} URLs`);
-      container.querySelector('#totalUrls').textContent = data.urlCount;
-      container.querySelector('#uniqueDomains').textContent = new Set(originalUrls.map(u => new URL(u.loc).hostname)).size;
+      stats.update({
+        totalUrls: data.urlCount,
+        uniqueDomains: new Set(originalUrls.map(u => new URL(u.loc).hostname)).size,
+      });
       headerInstance.updateUrls(originalUrls);
       updateMatchCount();
     } catch (err) {
@@ -141,9 +150,8 @@ export default function setupResultsPage(container) {
     }
   };
 
-  loadSitemapData();
+  loadSitemapData().then(setupViewToggle);
 
-  // Handle resize with debounce for performance
   let resizeTimeout;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
