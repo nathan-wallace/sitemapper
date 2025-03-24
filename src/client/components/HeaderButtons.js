@@ -1,4 +1,5 @@
-import { route } from '../index.js';
+// src/client/components/HeaderButtons.js
+import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 
 function debounce(fn, delay) {
   let timeout;
@@ -12,11 +13,6 @@ export class HeaderButtons {
   constructor(container, options = {}) {
     this.container = container;
     this.options = {
-      onBack: () => {
-        console.debug('Back button clicked, navigating to /');
-        window.history.pushState({}, '', '/');
-        route('/'); // Trigger routing to input page
-      },
       urls: options.urls || [],
       path: options.path || window.location.pathname,
       ...options,
@@ -29,40 +25,27 @@ export class HeaderButtons {
   render() {
     const isResultsPage = this.options.path === '/results';
     this.container.innerHTML = `
-      <button id="backBtn" class="${!isResultsPage ? 'hidden' : ''}" aria-label="Back to input page">
-        <i class="fas fa-arrow-left"></i> Back
-      </button>
-      <button id="exportHtmlBtn" ${!isResultsPage || !this.options.urls.length ? 'disabled' : ''} aria-label="Export as HTML">
+      <button id="exportHtmlBtn" ${!isResultsPage || !this.options.urls.length ? 'hidden' : ''} aria-label="Export as HTML">
         <i class="fas fa-file-code"></i> Export HTML
       </button>
-      <button id="exportCsvBtn" ${!isResultsPage || !this.options.urls.length ? 'disabled' : ''} aria-label="Export as CSV">
+      <button id="exportCsvBtn" ${!isResultsPage || !this.options.urls.length ? 'hidden' : ''} aria-label="Export as CSV">
         <i class="fas fa-file-csv"></i> Export CSV
       </button>
-      <button id="exportJsonBtn" ${!isResultsPage || !this.options.urls.length ? 'disabled' : ''} aria-label="Export as JSON">
+      <button id="exportJsonBtn" ${!isResultsPage || !this.options.urls.length ? 'hidden' : ''} aria-label="Export as JSON">
         <i class="fas fa-file-code"></i> Export JSON
       </button>
+      <button id="clearCacheBtn" ${!isResultsPage || !this.options.urls.length ? '' : 'hidden'} aria-label="Clear cache">
+        <i class="fas fa-trash"></i> Clear Cache
+      </button>
+     
       <button id="themeToggleBtn" aria-label="Toggle dark mode">
-        <i class="fas fa-moon"></i> Toggle Theme
+        <i class="fas fa-moon"></i>
       </button>
     `;
   }
 
   setupEventListeners() {
     this.cleanupListeners();
-
-    const backBtn = this.container.querySelector('#backBtn');
-    if (backBtn) {
-      const backHandler = () => {
-        console.log('Back button clicked, current path:', this.options.path);
-        this.options.onBack();
-        console.log('After onBack, new path:', window.location.pathname);
-        // No need to update this.options.path or re-render here; route('/') handles it
-      };
-      backBtn.addEventListener('click', backHandler);
-      this.listeners.set(backBtn, [['click', backHandler]]);
-    } else {
-      console.warn('Back button not found in DOM');
-    }
 
     const exportButtons = [
       ['#exportHtmlBtn', this.exportHTML.bind(this), 'Exporting HTML...'],
@@ -76,7 +59,12 @@ export class HeaderButtons {
         const wrappedHandler = async () => {
           btn.disabled = true;
           btn.textContent = label;
-          await handler();
+          try {
+            await handler();
+          } catch (err) {
+            console.error(`Export failed (${selector}):`, err);
+            alert(`Failed to export: ${err.message}`);
+          }
           btn.disabled = !this.options.urls.length || this.options.path !== '/results';
           btn.innerHTML = btn.id === 'exportHtmlBtn' ? '<i class="fas fa-file-code"></i> Export HTML' :
                           btn.id === 'exportCsvBtn' ? '<i class="fas fa-file-csv"></i> Export CSV' :
@@ -86,6 +74,25 @@ export class HeaderButtons {
         this.listeners.set(btn, [['click', wrappedHandler]]);
       }
     });
+
+    const clearCacheBtn = this.container.querySelector('#clearCacheBtn');
+    if (clearCacheBtn) {
+      const clearCacheHandler = async () => {
+        showLoading();
+        try {
+          const response = await fetch('/sitemap/clear-cache', { method: 'POST' });
+          if (!response.ok) throw new Error('Failed to clear cache');
+          showFeedback('Cache cleared successfully');
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+          showError(err.message);
+        } finally {
+          hideLoading();
+        }
+      };
+      clearCacheBtn.addEventListener('click', clearCacheHandler);
+      this.listeners.set(clearCacheBtn, [['click', clearCacheHandler]]);
+    }
 
     const themeBtn = this.container.querySelector('#themeToggleBtn');
     if (themeBtn) {
@@ -103,33 +110,50 @@ export class HeaderButtons {
   }
 
   exportHTML = debounce(async () => {
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html><body><h1>Sitemap URLs</h1><ul>
-      ${this.options.urls.map(url => `<li><a href="${url.loc}">${url.loc}</a> (Last Modified: ${url.lastmod})</li>`).join('')}
-      </ul></body></html>`;
-    this.downloadFile(htmlContent, 'sitemap.html', 'text/html');
+    try {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html><body><h1>Sitemap URLs</h1><ul>
+        ${this.options.urls.map(url => `<li><a href="${url.loc}">${url.loc}</a> (Last Modified: ${url.lastmod})</li>`).join('')}
+        </ul></body></html>`;
+      this.downloadFile(htmlContent, 'sitemap.html', 'text/html');
+    } catch (err) {
+      throw new Error('HTML export failed');
+    }
   }, 300);
 
   exportCSV = debounce(async () => {
-    const csvContent = 'URL,Last Modified,Change Frequency,Priority\n' +
-      this.options.urls.map(url => `"${url.loc}","${url.lastmod}","${url.changefreq}","${url.priority}"`).join('\n');
-    this.downloadFile(csvContent, 'sitemap.csv', 'text/csv');
+    try {
+      const csvContent = 'URL,Last Modified,Change Frequency,Priority\n' +
+        this.options.urls.map(url => `"${url.loc}","${url.lastmod}","${url.changefreq}","${url.priority}"`).join('\n');
+      this.downloadFile(csvContent, 'sitemap.csv', 'text/csv');
+    } catch (err) {
+      throw new Error('CSV export failed');
+    }
   }, 300);
 
   exportJSON = debounce(async () => {
-    const jsonContent = JSON.stringify(this.options.urls, null, 2);
-    this.downloadFile(jsonContent, 'sitemap.json', 'application/json');
+    try {
+      const jsonContent = JSON.stringify(this.options.urls, null, 2);
+      this.downloadFile(jsonContent, 'sitemap.json', 'application/json');
+    } catch (err) {
+      throw new Error('JSON export failed');
+    }
   }, 300);
 
   downloadFile(content, fileName, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href); // Clean up
+    } catch (err) {
+      throw new Error(`Failed to download ${fileName}: ${err.message}`);
+    }
   }
 
   updateRoute(newPath) {

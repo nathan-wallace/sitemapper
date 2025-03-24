@@ -7,9 +7,12 @@
     "dev:client": "cd src/client && vite",
     "dev": "npm run dev:server & npm run dev:client",
     "build": "vite build",
-    "serve": "NODE_ENV=production node src/server/index.js"
+    "serve": "vite build && NODE_ENV=production node src/server/index.js"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "axios": "^1.8.4",
     "axios-retry": "^4.5.0",
     "d3": "^7.9.0",

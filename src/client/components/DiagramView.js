@@ -1,3 +1,4 @@
+// src/client/components/DiagramView.js
 import * as d3 from 'd3';
 import { showLoading, hideLoading } from '../utils/dom.js';
 
@@ -16,15 +17,15 @@ export class DiagramView {
   constructor(container) {
     this.container = container;
     this.svg = null;
-    this.g = null; // Group element for diagram content
+    this.g = null;
     this.width = container.clientWidth || 1000;
     this.height = Math.max(window.innerHeight - 200, 600);
     this.expandedNodes = new Set();
     this.zoomLevel = 1;
     this.nodeId = 0;
     this.zoomBehavior = null;
-    this.treeData = null; // Store tree data for re-rendering
-    this.listeners = new Map(); // Track event listeners
+    this.treeData = null;
+    this.listeners = new Map();
     this.renderControls();
   }
 
@@ -150,12 +151,29 @@ export class DiagramView {
           domainMap.set(hostname, domainNode);
           root.children.push(domainNode);
         }
-        domainNode.children.push({ name: url.loc.split('/').pop(), url, children: [] });
+        // Initially collapse URLs under domain, mark as lazy
+        if (!domainNode.children.length) {
+          domainNode.children.push({ name: 'URLs', urlCount: 0, children: [], isLazy: true });
+        }
+        domainNode.children[0].urlCount = (domainNode.children[0].urlCount || 0) + 1;
+        domainNode.children[0].urls = domainNode.children[0].urls || [];
+        domainNode.children[0].urls.push(url);
       } catch (e) {
         console.warn(`Skipping invalid URL: ${url.loc}`, e);
       }
     });
     return root;
+  }
+
+  async loadLazyChildren(node) {
+    if (node.data.isLazy && node.data.urls && !node.children) {
+      node.children = node.data.urls.map(url => ({
+        name: url.loc.split('/').pop(),
+        url,
+        children: []
+      }));
+      node.data.isLazy = false; // Mark as loaded
+    }
   }
 
   drawDiagram() {
@@ -178,10 +196,9 @@ export class DiagramView {
       .on('zoom', throttle((event) => this.zoomed(event), 50));
 
     this.svg.call(this.zoomBehavior)
-      .on('dblclick.zoom', null) // Disable double-click zoom
-      .on('wheel.zoom', null); // We'll handle wheel separately
+      .on('dblclick.zoom', null)
+      .on('wheel.zoom', null);
 
-    // Custom mouse wheel zooming
     this.svg.on('wheel', (event) => {
       event.preventDefault();
       const scaleFactor = event.deltaY < 0 ? 1.1 : 0.9;
@@ -195,7 +212,7 @@ export class DiagramView {
     root.y0 = 0;
 
     root.children.forEach(d => this.collapse(d, true));
-    this.g.datum(root); // Bind root to g
+    this.g.datum(root);
     this.update(root);
     this.fitToView(root);
   }
@@ -213,7 +230,6 @@ export class DiagramView {
     let newScale = currentTransform.k * factor;
 
     if (clientX && clientY) {
-      // Zoom at mouse position
       const svgRect = this.svg.node().getBoundingClientRect();
       const mouseX = clientX - svgRect.left;
       const mouseY = clientY - svgRect.top;
@@ -224,7 +240,6 @@ export class DiagramView {
         d3.zoomIdentity.translate(newX, newY).scale(newScale)
       );
     } else {
-      // Zoom at center
       this.svg.transition().duration(300).call(this.zoomBehavior.scaleBy, factor);
     }
   }
@@ -266,9 +281,12 @@ export class DiagramView {
       .append('g')
       .attr('class', 'node')
       .attr('transform', d => `translate(${source.y0},${source.x0})`)
-      .on('click', (event, d) => {
+      .on('click', async (event, d) => {
         if (d.data.isLazy && !d.children && !d._children) {
-          // Placeholder for lazy loading
+          showLoading(50);
+          await this.loadLazyChildren(d);
+          hideLoading();
+          if (d.children) this.update(d);
         } else if (d.children) {
           d._children = d.children;
           d.children = null;
@@ -279,10 +297,10 @@ export class DiagramView {
           this.expandedNodes.add(d.data.name);
         }
         this.update(d);
-        this.centerNode(d); // Center on clicked node
+        this.centerNode(d);
       });
 
-    nodeEnter.filter(d => d.children || d._children)
+    nodeEnter.filter(d => d.children || d._children || d.data.isLazy)
       .append('rect')
       .attr('class', 'folder-bg')
       .attr('width', 160)
@@ -291,7 +309,7 @@ export class DiagramView {
       .attr('y', -20)
       .attr('rx', 8);
 
-    nodeEnter.filter(d => d.children || d._children)
+    nodeEnter.filter(d => d.children || d._children || d.data.isLazy)
       .append('path')
       .attr('class', 'folder-icon')
       .attr('d', 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8L10 4z')
@@ -299,12 +317,12 @@ export class DiagramView {
 
     nodeEnter.append('text')
       .attr('dy', '0.35em')
-      .attr('x', d => d.children || d._children ? -30 : 10)
-      .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
-      .attr('class', d => d.children || d._children ? 'folder-label' : 'url-label')
-      .text(d => d.data.name.length > 25 ? `${d.data.name.slice(0, 22)}...` : d.data.name)
+      .attr('x', d => d.children || d._children || d.data.isLazy ? -30 : 10)
+      .attr('text-anchor', d => d.children || d._children || d.data.isLazy ? 'end' : 'start')
+      .attr('class', d => d.children || d._children || d.data.isLazy ? 'folder-label' : 'url-label')
+      .text(d => d.data.urlCount ? `${d.data.name} (${d.data.urlCount})` : (d.data.name.length > 25 ? `${d.data.name.slice(0, 22)}...` : d.data.name))
       .on('click', (event, d) => {
-        event.stopPropagation(); // Prevent node toggle on text click
+        event.stopPropagation();
         if (d.data.url) window.open(d.data.url.loc, '_blank');
       });
 
@@ -319,8 +337,8 @@ export class DiagramView {
     nodeUpdate.select('.folder-bg').attr('x', -80).attr('y', -20);
     nodeUpdate.select('.folder-icon').attr('transform', 'translate(-65, -18) scale(1.2)');
     nodeUpdate.select('text')
-      .attr('x', d => d.children || d._children ? -30 : 10)
-      .attr('text-anchor', d => d.children || d._children ? 'end' : 'start');
+      .attr('x', d => d.children || d._children || d.data.isLazy ? -30 : 10)
+      .attr('text-anchor', d => d.children || d._children || d.data.isLazy ? 'end' : 'start');
 
     node.exit()
       .transition()
@@ -358,7 +376,10 @@ export class DiagramView {
   expandAll() {
     if (!this.g) return;
     const root = d3.hierarchy(this.g.datum());
-    root.descendants().forEach(d => {
+    root.descendants().forEach(async d => {
+      if (d.data.isLazy) {
+        await this.loadLazyChildren(d);
+      }
       if (d._children) {
         d.children = d._children;
         d._children = null;
@@ -424,8 +445,8 @@ export class DiagramView {
 
   destroy() {
     if (this.svg) {
-      this.svg.on('.zoom', null); // Remove all zoom-related listeners
-      this.svg.on('wheel', null); // Remove wheel listener
+      this.svg.on('.zoom', null);
+      this.svg.on('wheel', null);
     }
     this.cleanupListeners();
     this.container.innerHTML = '';

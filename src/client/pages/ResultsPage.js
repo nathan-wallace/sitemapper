@@ -3,16 +3,17 @@ import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.
 import { TreeView } from '../components/TreeView.js';
 import { DiagramView } from '../components/DiagramView.js';
 import { Filters } from '../components/Filters.js';
-import { route, headerInstance } from '../index.js';
+import { headerInstance } from '../index.js';
 
 export default function setupResultsPage(container) {
   container.innerHTML = `
-    <div id="filters-container">
-      <div id="filters"></div>
-    </div>
+    <h2>Sitemap Scan</h2>
     <div id="view-toggle">
       <button id="treeViewBtn" class="view-btn active">Tree View</button>
       <button id="diagramViewBtn" class="view-btn">Diagram View</button>
+    </div>
+    <div id="filters-container">
+      <div id="filters"></div>
     </div>
     <div id="stats">
       <p>Total URLs: <span id="totalUrls">0</span></p>

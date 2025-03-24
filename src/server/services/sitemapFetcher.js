@@ -1,29 +1,43 @@
+// src/server/services/sitemapFetcher.js
 import axios from 'axios';
 import config from '../../config/config.js';
 import { parseSitemap } from './sitemapParser.js';
 
-// Fetch and parse sitemap recursively
+// Fetch and parse sitemap recursively, with status tracking
 export async function fetchSitemap(url, allUrls = new Set(), depth = 0) {
+  const status = { attempted: [], succeeded: [], failed: [], message: '' };
+  status.attempted.push(url);
+
   if (depth > config.maxDepth) {
     console.warn(`Max recursion depth (${config.maxDepth}) reached for ${url}`);
-    return allUrls;
+    status.failed.push({ url, reason: `Max recursion depth (${config.maxDepth}) reached` });
+    return { urls: allUrls, status };
   }
 
   try {
     const response = await tryFetchSitemap(url);
-    await processSitemap(url, response, allUrls, depth);
+    await processSitemap(url, response, allUrls, depth, status);
+    status.succeeded.push(url);
   } catch (err) {
     console.log(`${url} is not a sitemap: ${err.message}. Attempting discovery...`);
-    const sitemaps = await discoverSitemaps(url);
+    status.failed.push({ url, reason: err.message });
+    const sitemaps = await discoverSitemaps(url, status);
     if (sitemaps.length === 0) {
       console.log(`No sitemaps discovered for ${url}`);
-      return allUrls;
+      status.message = 'No valid sitemaps or URLs found after discovery';
+      return { urls: allUrls, status };
     }
     for (const { url: sitemapUrl, xmlContent } of sitemaps) {
-      await processSitemap(sitemapUrl, xmlContent, allUrls, depth);
+      await processSitemap(sitemapUrl, xmlContent, allUrls, depth, status);
+      status.succeeded.push(sitemapUrl);
     }
   }
-  return allUrls;
+  if (allUrls.size > 0) {
+    status.message = `Successfully fetched ${allUrls.size} URLs`;
+  } else {
+    status.message = 'No URLs extracted from sitemaps';
+  }
+  return { urls: allUrls, status };
 }
 
 async function tryFetchSitemap(url) {
@@ -40,7 +54,7 @@ async function tryFetchSitemap(url) {
   return response.data;
 }
 
-async function discoverSitemaps(baseUrl) {
+async function discoverSitemaps(baseUrl, status) {
   const potentialPaths = [
     '/sitemap.xml',
     '/sitemap_index.xml',
@@ -53,6 +67,7 @@ async function discoverSitemaps(baseUrl) {
 
   for (const path of potentialPaths) {
     const url = `${base}${path}`;
+    status.attempted.push(url);
     try {
       const xmlContent = await tryFetchSitemap(url);
       if (xmlContent && xmlContent.trim().startsWith('<?xml')) {
@@ -60,15 +75,17 @@ async function discoverSitemaps(baseUrl) {
         discoveredSitemaps.push({ url, xmlContent });
       } else {
         console.log(`Fetched ${url} but it’s not XML`);
+        status.failed.push({ url, reason: 'Not a valid XML sitemap' });
       }
     } catch (err) {
       console.log(`Discovery fetch failed for ${url}: ${err.message}`);
+      status.failed.push({ url, reason: err.message });
     }
   }
   return discoveredSitemaps;
 }
 
-async function processSitemap(url, xmlContent, allUrls, depth) {
+async function processSitemap(url, xmlContent, allUrls, depth, status) {
   const result = parseSitemap(xmlContent);
   const { sitemapIndex, urlSet } = result;
 
@@ -78,7 +95,14 @@ async function processSitemap(url, xmlContent, allUrls, depth) {
       .filter(Boolean);
     console.log(`Sitemap index at ${url} with ${sitemaps.length} children`);
     await Promise.all(
-      sitemaps.map((loc) => fetchSitemap(loc, allUrls, depth + 1))
+      sitemaps.map((loc) => {
+        status.attempted.push(loc);
+        return fetchSitemap(loc, allUrls, depth + 1).then((result) => {
+          if (result.urls.size > allUrls.size) status.succeeded.push(loc);
+          else status.failed.push({ url: loc, reason: 'No new URLs added' });
+          result.urls.forEach((url) => allUrls.add(url));
+        });
+      })
     );
   } else if (urlSet.length > 0) {
     const urls = Array.from(urlSet[0].getElementsByTagName('url')).map((url) => ({

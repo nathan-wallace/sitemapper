@@ -2,6 +2,15 @@
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 import { route } from '../index.js';
 
+function validateUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export default function setupInputPage(container) {
   container.innerHTML = `
     <h2>Load Sitemap</h2>
@@ -12,12 +21,9 @@ export default function setupInputPage(container) {
     </form>
     <form id="sitemapUploadForm" method="POST" enctype="multipart/form-data" class="input-group">
       <label for="sitemapFile">Upload Sitemap File:</label>
-      <input type="file" id="sitemapFile" name="sitemapFile" />
+      <input type="file" id="sitemapFile" name="sitemapFile" accept=".xml" />
       <button type="submit">Upload</button>
     </form>
-    <div class="button-group">
-      <button id="clearCacheBtn" type="button">Clear Cache</button>
-    </div>
     <div id="status">
       <div id="loading" class="hidden">
         <progress id="loadProgress" max="100" value="0"></progress>
@@ -31,33 +37,38 @@ export default function setupInputPage(container) {
   const sitemapUrlForm = container.querySelector('#sitemapUrlForm');
   const sitemapUrlInput = container.querySelector('#sitemapUrlInput');
   const sitemapUploadForm = container.querySelector('#sitemapUploadForm');
-  const clearCacheBtn = container.querySelector('#clearCacheBtn');
 
   sitemapUrlForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = sitemapUrlInput.value.trim();
-    if (url) {
-      showLoading(10);
-      try {
-        const response = await fetch('/sitemap/url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch sitemap');
-        }
-        const { id } = await response.json();
-        showLoading(50);
-        window.history.pushState({}, '', `/results?id=${id}`);
-        route('/results');
-        showFeedback('Sitemap loaded successfully');
-      } catch (err) {
-        showError(err.message);
-      } finally {
-        hideLoading();
+    if (!url) {
+      showError('Please enter a sitemap URL');
+      return;
+    }
+    if (!validateUrl(url)) {
+      showError('Invalid URL: Must start with http:// or https:// and be well-formed');
+      return;
+    }
+    showLoading(10);
+    try {
+      const response = await fetch('/sitemap/url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch sitemap');
       }
+      const { id, message, status } = await response.json();
+      showLoading(50);
+      window.history.pushState({}, '', `/results?id=${id}`);
+      route('/results');
+      showFeedback(`${message} (${status.succeeded.length}/${status.attempted.length} sitemaps succeeded)`);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      hideLoading();
     }
   });
 
@@ -74,25 +85,11 @@ export default function setupInputPage(container) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to upload sitemap');
       }
-      const { id } = await response.json();
+      const { id, message } = await response.json();
       showLoading(50);
       window.history.pushState({}, '', `/results?id=${id}`);
       route('/results');
-      showFeedback('Sitemap uploaded successfully');
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      hideLoading();
-    }
-  });
-
-  clearCacheBtn.addEventListener('click', async () => {
-    showLoading();
-    try {
-      const response = await fetch('/sitemap/clear-cache', { method: 'POST' });
-      if (!response.ok) throw new Error('Failed to clear cache');
-      showFeedback('Cache cleared successfully');
-      setTimeout(() => window.location.reload(), 1000);
+      showFeedback(message);
     } catch (err) {
       showError(err.message);
     } finally {
