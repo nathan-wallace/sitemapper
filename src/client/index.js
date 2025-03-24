@@ -1,5 +1,5 @@
 // src/client/index.js
-import { Header } from './components/Header.js';
+import { Header } from './components/Header/Header.js';
 import setupInputPage from './pages/InputPage.js';
 import setupResultsPage from './pages/ResultsPage.js';
 

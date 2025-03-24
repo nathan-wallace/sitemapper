@@ -1,5 +1,6 @@
 // src/client/components/HeaderButtons.js
-import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
+import { showLoading, hideLoading, showError, showFeedback } from '../../utils/dom.js';
+import './styles.css';
 
 function debounce(fn, delay) {
   let timeout;

@@ -1,4 +1,3 @@
-// src/client/components/TreeView.js
 import { showLoading, hideLoading } from '../../utils/dom.js';
 import './styles.css';
 

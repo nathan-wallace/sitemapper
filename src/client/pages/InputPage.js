@@ -1,4 +1,3 @@
-// src/client/pages/InputPage.js
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 import { route } from '../index.js';
 

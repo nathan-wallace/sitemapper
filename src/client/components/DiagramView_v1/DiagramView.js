@@ -1,3 +1,4 @@
+// src/client/components/DiagramView.js
 import * as d3 from 'd3';
 import { showLoading, hideLoading } from '../../utils/dom.js';
 import './styles.css';
@@ -18,8 +19,9 @@ export class DiagramView {
     this.container = container;
     this.svg = null;
     this.g = null;
-    this.width = 0;
-    this.height = 0;
+    this.width = container.clientWidth || 1000;
+    this.height = Math.max(window.innerHeight - 200, 600);
+    this.expandedNodes = new Set();
     this.zoomLevel = 1;
     this.nodeId = 0;
     this.zoomBehavior = null;
@@ -43,14 +45,24 @@ export class DiagramView {
             <path d="M5 12h14"/>
           </svg>
         </button>
+        <span id="zoomLevel" class="zoom-level" aria-live="polite">100%</span>
+      </div>
+      <div class="control-group">
+        <button id="expandAllBtn" title="Expand All" aria-label="Expand all nodes">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16v16H4zM8 12h8M12 8v8"/>
+          </svg>
+        </button>
+        <button id="collapseAllBtn" title="Collapse All" aria-label="Collapse all nodes">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16v16H4zM8 12h8"/>
+          </svg>
+        </button>
+      </div>
+      <div class="control-group">
         <button id="resetViewBtn" title="Reset View" aria-label="Reset view">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 4c5-5 14-5 19 0M4 20c5 5 14 5 19 0"/>
-          </svg>
-        </button>
-        <button id="fullscreenBtn" title="Toggle Fullscreen" aria-label="Toggle fullscreen">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M8 3H5v3m3 13v3h-3m13-3h3v-3m-3-13v3h3"/>
           </svg>
         </button>
       </div>
@@ -64,8 +76,9 @@ export class DiagramView {
     const handlers = {
       '#zoomInBtn': () => this.zoom(1.2),
       '#zoomOutBtn': () => this.zoom(0.8),
+      '#expandAllBtn': () => this.expandAll(),
+      '#collapseAllBtn': () => this.collapseAll(),
       '#resetViewBtn': () => this.resetView(),
-      '#fullscreenBtn': () => this.toggleFullscreen(),
     };
     Object.entries(handlers).forEach(([selector, handler]) => {
       const btn = this.container.querySelector(selector);
@@ -98,19 +111,10 @@ export class DiagramView {
     const sortedUrls = this.sortUrls(filteredUrls, sortBy);
     this.treeData = this.buildTree(sortedUrls);
 
-    console.log('Tree Data:', this.treeData);
-    if (!this.treeData.children || this.treeData.children.length === 0) {
-      console.warn('No valid tree data to render.');
-      this.container.innerHTML += '<p>No sitemap data available to visualize.</p>';
-      hideLoading();
-      return;
-    }
-
     try {
       this.drawDiagram();
     } catch (e) {
       console.error('Failed to render diagram:', e);
-      this.container.innerHTML += '<p>Error rendering sitemap visualization.</p>';
     }
     hideLoading();
   }
@@ -135,67 +139,55 @@ export class DiagramView {
   }
 
   buildTree(urls) {
-    const root = { name: 'Sitemap', children: [] };
-    const pathMap = new Map();
+    const root = { name: 'Sitemap', children: [], isLazy: true };
+    const domainMap = new Map();
 
     urls.forEach(url => {
       try {
         const urlObj = new URL(url.loc || '');
         const hostname = urlObj.hostname;
-        const pathSegments = urlObj.pathname.split('/').filter(Boolean); // Remove empty segments
-
-        let currentNode = root;
-        let fullPath = hostname;
-
-        // Ensure domain node exists
-        if (!pathMap.has(hostname)) {
-          const domainNode = { name: hostname, children: [], url: null };
+        let domainNode = domainMap.get(hostname);
+        if (!domainNode) {
+          domainNode = { name: hostname, children: [], isLazy: true };
+          domainMap.set(hostname, domainNode);
           root.children.push(domainNode);
-          pathMap.set(hostname, domainNode);
         }
-        currentNode = pathMap.get(hostname);
-
-        // Build deeper hierarchy based on path segments
-        pathSegments.forEach((segment, index) => {
-          fullPath += `/${segment}`;
-          if (!pathMap.has(fullPath)) {
-            const newNode = { 
-              name: segment, 
-              children: [], 
-              url: index === pathSegments.length - 1 ? url : null 
-            };
-            currentNode.children.push(newNode);
-            pathMap.set(fullPath, newNode);
-          }
-          currentNode = pathMap.get(fullPath);
-        });
+        // Initially collapse URLs under domain, mark as lazy
+        if (!domainNode.children.length) {
+          domainNode.children.push({ name: 'URLs', urlCount: 0, children: [], isLazy: true });
+        }
+        domainNode.children[0].urlCount = (domainNode.children[0].urlCount || 0) + 1;
+        domainNode.children[0].urls = domainNode.children[0].urls || [];
+        domainNode.children[0].urls.push(url);
       } catch (e) {
         console.warn(`Skipping invalid URL: ${url.loc}`, e);
       }
     });
-
     return root;
   }
 
-  drawDiagram() {
-    const containerRect = this.container.getBoundingClientRect();
-    this.width = containerRect.width || window.innerWidth;
-    this.height = containerRect.height || Math.max(window.innerHeight - 200, 600);
-    const margin = { top: 40, right: 60, bottom: 40, left: 60 };
+  async loadLazyChildren(node) {
+    if (node.data.isLazy && node.data.urls && !node.children) {
+      node.children = node.data.urls.map(url => ({
+        name: url.loc.split('/').pop(),
+        url,
+        children: []
+      }));
+      node.data.isLazy = false; // Mark as loaded
+    }
+  }
 
-    console.log('Container Dimensions:', { width: this.width, height: this.height });
+  drawDiagram() {
+    const margin = { top: 60, right: 120, bottom: 60, left: 120 };
+    this.width = this.container.clientWidth - margin.left - margin.right;
+    this.height = this.container.clientHeight - margin.top - margin.bottom;
 
     this.svg = d3.select(this.container)
       .append('svg')
-      .attr('width', this.width)
-      .attr('height', this.height)
-      .attr('viewBox', `0 0 ${this.width} ${this.height}`)
-      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .attr('width', this.width + margin.left + margin.right)
+      .attr('height', this.height + margin.top + margin.bottom)
       .attr('role', 'tree')
-      .style('background', '#fff')
-      .on('dblclick', (event) => {
-        if (event.target === this.svg.node()) this.resetView();
-      });
+      .style('background', '#fafafa');
 
     this.g = this.svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -205,22 +197,22 @@ export class DiagramView {
       .on('zoom', throttle((event) => this.zoomed(event), 50));
 
     this.svg.call(this.zoomBehavior)
-      .on('wheel.zoom', (event) => {
-        event.preventDefault();
-        const scaleFactor = event.deltaY < 0 ? 1.1 : 0.9;
-        this.zoom(scaleFactor, event.clientX, event.clientY);
-      });
+      .on('dblclick.zoom', null)
+      .on('wheel.zoom', null);
+
+    this.svg.on('wheel', (event) => {
+      event.preventDefault();
+      const scaleFactor = event.deltaY < 0 ? 1.1 : 0.9;
+      this.zoom(scaleFactor, event.clientX, event.clientY);
+    });
 
     const hierarchy = d3.hierarchy(this.treeData);
-    console.log('Hierarchy Depth:', hierarchy.height, 'Hierarchy:', hierarchy);
-    const tree = d3.tree()
-      .size([this.width - margin.left - margin.right, this.height - margin.top - margin.bottom])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 1.5) / a.depth);
-
+    const tree = d3.tree().nodeSize([60, 250]);
     const root = tree(hierarchy);
     root.x0 = this.width / 2;
     root.y0 = 0;
 
+    root.children.forEach(d => this.collapse(d, true));
     this.g.datum(root);
     this.update(root);
     this.fitToView(root);
@@ -230,6 +222,7 @@ export class DiagramView {
     if (!this.g) return;
     this.g.attr('transform', event.transform);
     this.zoomLevel = event.transform.k;
+    this.updateZoomLevelDisplay();
   }
 
   zoom(factor, clientX = null, clientY = null) {
@@ -252,11 +245,15 @@ export class DiagramView {
     }
   }
 
+  updateZoomLevelDisplay() {
+    const zoomPercentage = Math.round(this.zoomLevel * 100);
+    const zoomLevelEl = this.container.querySelector('#zoomLevel');
+    if (zoomLevelEl) zoomLevelEl.textContent = `${zoomPercentage}%`;
+  }
+
   update(source) {
-    const duration = 750;
-    const tree = d3.tree()
-      .size([this.width - 120, this.height - 80])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 1.5) / a.depth);
+    const duration = 650;
+    const tree = d3.tree().nodeSize([60, 250]);
     const root = tree(source);
 
     const link = this.g.selectAll('.link')
@@ -284,101 +281,150 @@ export class DiagramView {
     const nodeEnter = node.enter()
       .append('g')
       .attr('class', 'node')
-      .attr('transform', d => `translate(${source.x0},${source.y0})`)
-      .on('dblclick', (event, d) => {
-        event.stopPropagation();
-        this.zoomToNode(d);
-      })
-      .on('click', (event, d) => {
-        if (d.data.url) window.open(d.data.url.loc, '_blank');
+      .attr('transform', d => `translate(${source.y0},${source.x0})`)
+      .on('click', async (event, d) => {
+        if (d.data.isLazy && !d.children && !d._children) {
+          showLoading(50);
+          await this.loadLazyChildren(d);
+          hideLoading();
+          if (d.children) this.update(d);
+        } else if (d.children) {
+          d._children = d.children;
+          d.children = null;
+          this.expandedNodes.delete(d.data.name);
+        } else if (d._children) {
+          d.children = d._children;
+          d._children = null;
+          this.expandedNodes.add(d.data.name);
+        }
+        this.update(d);
+        this.centerNode(d);
       });
 
-    nodeEnter.append('svg')
-      .attr('width', 36)
-      .attr('height', 36)
-      .attr('x', -18)
-      .attr('y', -18)
+    nodeEnter.filter(d => d.children || d._children || d.data.isLazy)
+      .append('rect')
+      .attr('class', 'folder-bg')
+      .attr('width', 160)
+      .attr('height', 40)
+      .attr('x', -80)
+      .attr('y', -20)
+      .attr('rx', 8);
+
+    nodeEnter.filter(d => d.children || d._children || d.data.isLazy)
+      .append('path')
       .attr('class', 'folder-icon')
-      .html(`
-        <path d="M4 8v20h28V12H18l-4-4H4zm10 0l4 4h10v12H8V8h6z" fill="#5a9cff" stroke="#2b6cb0" stroke-width="1.5"/>
-      `);
+      .attr('d', 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8L10 4z')
+      .attr('transform', 'translate(-65, -18) scale(1.2)');
 
     nodeEnter.append('text')
       .attr('dy', '0.35em')
-      .attr('y', 0)
-      .attr('text-anchor', 'middle')
-      .attr('class', 'folder-label')
-      .text(d => d.data.name.length > 12 ? `${d.data.name.slice(0, 9)}...` : d.data.name);
+      .attr('x', d => d.children || d._children || d.data.isLazy ? -30 : 10)
+      .attr('text-anchor', d => d.children || d._children || d.data.isLazy ? 'end' : 'start')
+      .attr('class', d => d.children || d._children || d.data.isLazy ? 'folder-label' : 'url-label')
+      .text(d => d.data.urlCount ? `${d.data.name} (${d.data.urlCount})` : (d.data.name.length > 25 ? `${d.data.name.slice(0, 22)}...` : d.data.name))
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (d.data.url) window.open(d.data.url.loc, '_blank');
+      });
 
     nodeEnter.append('title')
-      .text(d => this.formatTooltip(d.data));
+      .text(d => d.data.url ? this.formatUrl(d.data.url) : d.data.name);
 
     const nodeUpdate = node.merge(nodeEnter)
       .transition()
       .duration(duration)
-      .attr('transform', d => `translate(${d.x},${d.y})`);
+      .attr('transform', d => `translate(${d.y},${d.x})`);
+
+    nodeUpdate.select('.folder-bg').attr('x', -80).attr('y', -20);
+    nodeUpdate.select('.folder-icon').attr('transform', 'translate(-65, -18) scale(1.2)');
+    nodeUpdate.select('text')
+      .attr('x', d => d.children || d._children || d.data.isLazy ? -30 : 10)
+      .attr('text-anchor', d => d.children || d._children || d.data.isLazy ? 'end' : 'start');
 
     node.exit()
       .transition()
       .duration(duration)
-      .attr('transform', d => `translate(${source.x},${source.y})`)
+      .attr('transform', d => `translate(${source.y},${source.x})`)
       .remove();
 
     root.each(d => { d.x0 = d.x; d.y0 = d.y; });
   }
 
   diagonal(s, d) {
-    return `M ${s.x} ${s.y} 
-            C ${(s.x + d.x) / 2} ${s.y}, 
-              ${(s.x + d.x) / 2} ${d.y}, 
-              ${d.x} ${d.y}`;
+    return `M ${s.y} ${s.x} C ${s.y} ${(s.x + d.x) / 2}, ${d.y} ${(s.x + d.x) / 2}, ${d.y} ${d.x}`;
   }
 
-  formatTooltip(data) {
-    let output = `Name: ${data.name}`;
-    if (data.url) {
-      output += `\nURL: ${data.url.loc}`;
-      if (data.url.lastmod) output += `\nLast Modified: ${data.url.lastmod}`;
-      if (data.url.changefreq) output += `\nChange Frequency: ${data.url.changefreq}`;
-      if (data.url.priority) output += `\nPriority: ${data.url.priority}`;
-    }
-    if (data.children && data.children.length > 0) {
-      output += `\nChildren: ${data.children.length}`;
-    }
+  formatUrl(url) {
+    let output = url.loc;
+    if (url.lastmod) output += `\nLast Modified: ${url.lastmod}`;
+    if (url.changefreq) output += `\nChange Frequency: ${url.changefreq}`;
+    if (url.priority) output += `\nPriority: ${url.priority}`;
     return output;
   }
 
-  zoomToNode(node) {
+  centerNode(node) {
     if (!this.svg || !this.zoomBehavior || !this.g) return;
     const currentTransform = d3.zoomTransform(this.svg.node());
-    const scale = node.depth === 0 ? 1 : 1.5;
-    const targetNode = node.depth === 0 ? node : node.parent ? node : node;
-    const x = -targetNode.x * scale + this.width / 2;
-    const y = -targetNode.y * scale + (node.depth === 0 ? 40 : this.height / 4);
-    this.svg.transition().duration(750).call(
+    const scale = currentTransform.k;
+    const x = -node.y * scale + this.width / 2;
+    const y = -node.x * scale + this.height / 2;
+    this.svg.transition().duration(650).call(
       this.zoomBehavior.transform,
       d3.zoomIdentity.translate(x, y).scale(scale)
     );
-    this.zoomLevel = scale;
+  }
+
+  expandAll() {
+    if (!this.g) return;
+    const root = d3.hierarchy(this.g.datum());
+    root.descendants().forEach(async d => {
+      if (d.data.isLazy) {
+        await this.loadLazyChildren(d);
+      }
+      if (d._children) {
+        d.children = d._children;
+        d._children = null;
+        this.expandedNodes.add(d.data.name);
+      }
+    });
+    this.update(root);
+    this.fitToView(root);
+  }
+
+  collapseAll() {
+    if (!this.g) return;
+    const root = d3.hierarchy(this.g.datum());
+    root.descendants().forEach(d => this.collapse(d));
+    this.update(root);
+    this.fitToView(root);
+  }
+
+  collapse(d, initial = false) {
+    if (d.children) {
+      d._children = d.children;
+      d._children.forEach(child => this.collapse(child));
+      d.children = null;
+      if (!initial) this.expandedNodes.delete(d.data.name);
+    }
   }
 
   fitToView(root) {
     if (!this.zoomBehavior || !this.g) return;
     const bounds = this.getTreeBounds(root);
-    const width = bounds.maxX - bounds.minX;
-    const height = bounds.maxY - bounds.minY;
-    const scaleX = (this.width - 120) / (width || 1);
-    const scaleY = (this.height - 80) / (height || 1);
-    const scale = Math.min(scaleX, scaleY, 1.5) * 0.85;
-    const tx = this.width / 2 - (bounds.minX + width / 2) * scale;
-    const ty = 40 - bounds.minY * scale;
+    const width = bounds.maxY - bounds.minY;
+    const height = bounds.maxX - bounds.minX;
+    const scaleX = this.width / (width || 1);
+    const scaleY = this.height / (height || 1);
+    const scale = Math.min(scaleX, scaleY, 2) * 0.9;
+    const tx = this.width / 2 - (bounds.minY + width / 2) * scale;
+    const ty = this.height / 2 - (bounds.minX + height / 2) * scale;
 
-    console.log('Fit to View - Bounds:', bounds, 'Scale:', scale);
-    this.svg.transition().duration(750).call(
+    this.svg.transition().duration(650).call(
       this.zoomBehavior.transform,
       d3.zoomIdentity.translate(tx, ty).scale(scale)
     );
     this.zoomLevel = scale;
+    this.updateZoomLevelDisplay();
   }
 
   getTreeBounds(root) {
@@ -398,33 +444,10 @@ export class DiagramView {
     this.fitToView(root);
   }
 
-  toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      this.container.requestFullscreen().catch(err => {
-        console.error(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-    setTimeout(() => {
-      this.updateDimensions();
-      this.resetView();
-    }, 100);
-  }
-
-  updateDimensions() {
-    const containerRect = this.container.getBoundingClientRect();
-    this.width = containerRect.width || window.innerWidth;
-    this.height = containerRect.height || Math.max(window.innerHeight - 200, 600);
-    this.svg.attr('width', this.width).attr('height', this.height);
-    this.svg.attr('viewBox', `0 0 ${this.width} ${this.height}`);
-  }
-
   destroy() {
     if (this.svg) {
       this.svg.on('.zoom', null);
       this.svg.on('wheel', null);
-      this.svg.on('dblclick', null);
     }
     this.cleanupListeners();
     this.container.innerHTML = '';
@@ -432,5 +455,6 @@ export class DiagramView {
     this.g = null;
     this.zoomBehavior = null;
     this.treeData = null;
+    this.expandedNodes.clear();
   }
 }

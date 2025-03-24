@@ -1,7 +1,4 @@
 /* Tree View */
-#tree{
-    position: relative;
-}
 .tree-controls {
     margin-bottom: 10px;
 }
@@ -77,20 +74,4 @@
 .dark-mode .highlight {
     background: #ffd700;
     color: #2d2d2d;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-
-
-}
-
-@media (max-width: 480px) {
-    .tree-list li {
-        margin: 4px 0;
-    }
-
-    .toggle, .url-leaf {
-        padding: 3px 6px;
-    }
 }

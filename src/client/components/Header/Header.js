@@ -1,4 +1,5 @@
-import { HeaderButtons } from './HeaderButtons.js';
+import { HeaderButtons } from '../HeaderButtons/HeaderButtons.js';
+import './styles.css';
 
 export class Header {
   constructor(container, options = {}) {

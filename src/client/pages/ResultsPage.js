@@ -1,8 +1,7 @@
-// src/client/pages/ResultsPage.js
 import { showLoading, hideLoading, showError, showFeedback } from '../utils/dom.js';
 import { TreeView } from '../components/TreeView/TreeView.js';
 import { DiagramView } from '../components/DiagramView/DiagramView.js';
-import { Filters } from '../components/Filters.js';
+import { Filters } from '../components/Filters/Filters.js';
 import { headerInstance } from '../index.js';
 
 export default function setupResultsPage(container) {
@@ -20,10 +19,8 @@ export default function setupResultsPage(container) {
       <p>Unique Domains: <span id="uniqueDomains">0</span></p>
       <p>Matches: <span id="matchCount"></span></p>
     </div>
-    <div id="view-container">
-      <div id="tree" class="tree"></div>
-      <div id="diagram" class="diagram view-hidden"></div>
-    </div>
+    <div id="tree" class="tree"></div>
+    <div id="diagram" class="diagram hidden"></div>
     <div id="status">
       <div id="loading" class="hidden">
         <progress id="loadProgress" max="100" value="0"></progress>
@@ -44,7 +41,7 @@ export default function setupResultsPage(container) {
   let currentFilter = {};
   let currentSortBy = 'url';
   let currentSearchTerm = '';
-  let currentView = 'tree'; // Default to Tree View
+  let currentView = 'tree';
 
   const filters = new Filters(filtersElement, {
     onApply: (filter, sortBy) => {
@@ -70,12 +67,13 @@ export default function setupResultsPage(container) {
   function renderCurrentView() {
     if (currentView === 'tree') {
       treeView.render(originalUrls, currentFilter, currentSortBy, currentSearchTerm);
-      treeContainer.classList.remove('view-hidden');
-      diagramContainer.classList.add('view-hidden');
+      treeContainer.classList.remove('hidden');
+      diagramContainer.classList.add('hidden');
     } else {
+      console.log('Rendering DiagramView with URLs:', originalUrls.length);
       diagramView.render(originalUrls, currentFilter, currentSortBy, currentSearchTerm);
-      diagramContainer.classList.remove('view-hidden');
-      treeContainer.classList.add('view-hidden');
+      diagramContainer.classList.remove('hidden');
+      treeContainer.classList.add('hidden');
     }
   }
 
@@ -127,6 +125,7 @@ export default function setupResultsPage(container) {
       }
       const data = await response.json();
       originalUrls = data.urls;
+      console.log('Loaded URLs:', originalUrls);
       showLoading(50);
       renderCurrentView();
       showLoading(100);
@@ -143,6 +142,18 @@ export default function setupResultsPage(container) {
   };
 
   loadSitemapData();
+
+  // Handle resize with debounce for performance
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      if (currentView === 'diagram') {
+        diagramView.destroy();
+        diagramView.render(originalUrls, currentFilter, currentSortBy, currentSearchTerm);
+      }
+    }, 200);
+  });
 
   return {
     treeView,

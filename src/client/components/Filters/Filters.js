@@ -1,3 +1,5 @@
+import './styles.css';
+
 function debounce(fn, delay) {
   let timeout;
   return (...args) => {
