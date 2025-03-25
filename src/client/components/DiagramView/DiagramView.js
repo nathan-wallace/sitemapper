@@ -2,14 +2,11 @@ import * as d3 from 'd3';
 import { showLoading, hideLoading } from '../../utils/dom.js';
 import './styles.css';
 
-function throttle(fn, limit) {
-  let inThrottle;
+function debounce(fn, wait) {
+  let timeout;
   return (...args) => {
-    if (!inThrottle) {
-      fn(...args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), wait);
   };
 }
 
@@ -90,7 +87,6 @@ export class DiagramView {
     const sortedUrls = this.sortUrls(filteredUrls, sortBy);
     this.treeData = this.buildTree(sortedUrls);
 
-    console.log('Tree Data:', this.treeData);
     if (!this.treeData.children || this.treeData.children.length === 0) {
       console.warn('No valid tree data to render.');
       this.container.innerHTML += '<p>No sitemap data available to visualize.</p>';
@@ -127,7 +123,7 @@ export class DiagramView {
   }
 
   buildTree(urls) {
-    const root = { name: 'Sitemap', fullPath: '', children: [], shownCount: 9 };
+    const root = { name: 'Sitemap', fullPath: '', children: [], shownCount: 9, expanded: false };
     const pathMap = new Map();
 
     urls.forEach(url => {
@@ -140,7 +136,7 @@ export class DiagramView {
         let fullPath = hostname;
 
         if (!pathMap.has(hostname)) {
-          const domainNode = { name: hostname, fullPath: hostname, children: [], url: null, shownCount: 9 };
+          const domainNode = { name: hostname, fullPath: hostname, children: [], url: null, shownCount: 9, expanded: false };
           root.children.push(domainNode);
           pathMap.set(hostname, domainNode);
         }
@@ -154,9 +150,10 @@ export class DiagramView {
               fullPath, 
               children: [], 
               url: index === pathSegments.length - 1 ? url : null,
-              shownCount: 9 
+              shownCount: 9,
+              expanded: false 
             };
-            if (currentNode.children.length < currentNode.shownCount) {
+            if (currentNode.children.length < currentNode.shownCount || currentNode.expanded) {
               currentNode.children.push(newNode);
             } else if (!currentNode.moreNode) {
               currentNode.moreNode = { 
@@ -165,11 +162,12 @@ export class DiagramView {
                 children: [], 
                 isMore: true, 
                 hiddenChildren: [],
-                shownCount: 0 
+                shownCount: 0,
+                expanded: false 
               };
               currentNode.children.push(currentNode.moreNode);
             }
-            if (currentNode.moreNode) {
+            if (currentNode.moreNode && !currentNode.expanded) {
               currentNode.moreNode.hiddenChildren.push(newNode);
             }
             pathMap.set(fullPath, newNode);
@@ -190,8 +188,6 @@ export class DiagramView {
     this.height = containerRect.height || Math.max(window.innerHeight - 200, 600);
     const margin = { top: 40, right: 60, bottom: 40, left: 60 };
 
-    console.log('Container Dimensions:', { width: this.width, height: this.height });
-
     this.svg = d3.select(this.container)
       .append('svg')
       .attr('width', this.width)
@@ -208,7 +204,7 @@ export class DiagramView {
 
     this.zoomBehavior = d3.zoom()
       .scaleExtent([0.3, 5])
-      .on('zoom', throttle((event) => this.zoomed(event), 50));
+      .on('zoom', debounce((event) => this.zoomed(event), 50));
 
     this.svg.call(this.zoomBehavior)
       .on('wheel.zoom', (event) => {
@@ -218,25 +214,85 @@ export class DiagramView {
       });
 
     const hierarchy = d3.hierarchy(this.treeData);
-    console.log('Hierarchy Depth:', hierarchy.height, 'Hierarchy:', hierarchy);
     const tree = d3.tree()
-      .size([this.width - 360, this.height - 240]) // Increased margins for spacing
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth); // Increased separation
+      .size([this.width - 360, this.height * 2])
+      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth * 1.5);
 
     const root = tree(hierarchy);
     root.x0 = this.width / 2;
     root.y0 = 0;
 
     this.g.datum(root);
-    this.update(root, true); // Initial layout
-    this.fitToView(root);
+    this.adjustNodePositions(root);
+    this.update(root, true);
+    this.centerRoot(root);
+  }
+
+  adjustNodePositions(root) {
+    const nodes = root.descendants();
+    const baseSize = 120;
+    const nodeSize = baseSize / this.zoomLevel;
+    const minHorizontalDistance = nodeSize * 1.2; // 20% horizontal padding
+    const minVerticalDistance = nodeSize * 1.5; // 50% vertical padding
+
+    // Group nodes by depth
+    const nodesByDepth = {};
+    nodes.forEach(node => {
+      const depth = node.depth;
+      if (!nodesByDepth[depth]) nodesByDepth[depth] = [];
+      nodesByDepth[depth].push(node);
+    });
+
+    // Adjust horizontal positions within each level
+    Object.keys(nodesByDepth).forEach(depth => {
+      const levelNodes = nodesByDepth[depth].sort((a, b) => a.x - b.x);
+      for (let i = 1; i < levelNodes.length; i++) {
+        const prevNode = levelNodes[i - 1];
+        const currNode = levelNodes[i];
+        const distance = currNode.x - prevNode.x;
+        if (distance < minHorizontalDistance) {
+          const adjustment = minHorizontalDistance - distance;
+          currNode.x += adjustment;
+          if (currNode.children) {
+            currNode.descendants().forEach(descendant => {
+              if (descendant !== currNode) descendant.x += adjustment;
+            });
+          }
+        }
+      }
+    });
+
+    // Adjust vertical positions for row spacing
+    const depths = Object.keys(nodesByDepth).sort((a, b) => a - b);
+    for (let i = 1; i < depths.length; i++) {
+      const prevDepth = depths[i - 1];
+      const currDepth = depths[i];
+      const prevNodes = nodesByDepth[prevDepth];
+      const currNodes = nodesByDepth[currDepth];
+      const prevMaxY = Math.max(...prevNodes.map(n => n.y));
+      const currMinY = Math.min(...currNodes.map(n => n.y));
+      const verticalGap = currMinY - prevMaxY;
+      if (verticalGap < minVerticalDistance) {
+        const adjustment = minVerticalDistance - verticalGap;
+        currNodes.forEach(node => {
+          node.y += adjustment;
+          if (node.children) {
+            node.descendants().forEach(descendant => {
+              if (descendant !== node) descendant.y += adjustment;
+            });
+          }
+        });
+      }
+    }
   }
 
   zoomed(event) {
     if (!this.g) return;
     this.g.attr('transform', event.transform);
     this.zoomLevel = event.transform.k;
-    // No update call here to avoid repositioning during zoom
+    const root = this.g.datum();
+    this.adjustNodePositions(root);
+    this.update(root);
   }
 
   zoom(factor, clientX = null, clientY = null) {
@@ -262,10 +318,10 @@ export class DiagramView {
   update(source, initial = false) {
     const duration = initial ? 0 : 750;
     const tree = d3.tree()
-      .size([this.width - 360, this.height - 240])
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth);
+      .size([this.width - 360, this.height * 2])
+      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth * 1.5);
     
-    const root = initial ? tree(source) : source; // Only compute layout initially or on More click
+    const root = initial ? tree(source) : source;
 
     const link = this.g.selectAll('.link')
       .data(root.links(), d => d.target.id);
@@ -304,7 +360,7 @@ export class DiagramView {
       })
       .on('click', (event, d) => {
         if (d.data.isMore) {
-          this.expandMoreNode(d);
+          this.toggleMoreNode(d);
         } else {
           this.showNodeModal(d.data);
         }
@@ -315,17 +371,30 @@ export class DiagramView {
       .attr('height', nodeSize)
       .attr('x', -nodeSize / 2)
       .attr('y', -nodeSize / 2)
+      .attr('viewBox', '0 32 576 448')
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .attr('class', 'folder-icon')
-      .html(d => `
-        <path d="M8 16v40h56V24H36l-8-8H8zm20 0l8 8h20v24H16V16h12z" 
-              fill="${d.data.isMore ? '#ff9f43' : '#5a9cff'}" 
-              stroke="${d.data.isMore ? '#e67e22' : '#2b6cb0'}" 
-              stroke-width="${strokeWidth}"/>
-      `);
+      .html(d => {
+        let iconPath, fillColor, strokeColor;
+        if (d.data.isMore) {
+          iconPath = 'M282.4 142.8c11.8 11.8 27.8 18.5 44.5 18.5H504c9.9 0 18 8.1 18 18v36H54v-108c0-9.9 8.1-18 18-18h150.2c4.7 0 9.3 1.9 12.7 5.3l38.1-38.1-38.1 38.1 48.2 48zM54 270h468v198c0 9.9-8.1 18-18 18H72c-9.9 0-18-8.1-18-18V270zM320.8 105.2L272.6 57c-13.5-13.5-31.8-21-50.9-21H72C32.3 36 0 68.3 0 108v360c0 39.7 32.3 72 72 72h432c39.7 0 72-32.3 72-72V216c0-39.7-32.3-72-72-72H329.9c-2.4 0-4.7-.9-6.4-2.6z';
+          fillColor = '#ff9f43';
+          strokeColor = '#e67e22';
+        } else if (!d.data.children || d.data.children.length === 0) {
+          iconPath = 'M96 432c-13.2 0-24-10.8-24-24L72 96c0-13.2 10.8-24 24-24h240v120c0 26.6 21.5 48 48 48h120v288c0 13.2-10.8 24-24 24H96zM96 0C43 0 0 43 0 96v352c0 53 43 96 96 96h384c53 0 96-43 96-96V154.5c0-25.5-10-49.9-28.1-67.9L389.6 28.1C371.6 10.1 347.2 0 343.2 0H96zm145.5 433.5c14.1-14.1 14.1-36.9 0-50.9s-36.9-14.1-50.9 0L118.5 454.5c-14.1 14.1-14.1 36.9 0 50.9l72 72c14.1 14.1 36.9 14.1 50.9 0s14.1-36.9 0-50.9l-46.5-46.5 46.5-46.5zM385.5 382.5c-14.1-14.1-36.9-14.1-50.9 0s-14.1 36.9 0 50.9l46.5 46.5-46.5 46.5c-14.1 14.1-14.1 36.9 0 50.9s36.9 14.1 50.9 0l72-72c14.1-14.1 14.1-36.9 0-50.9l-72-72z';
+          fillColor = '#5a9cff';
+          strokeColor = '#2b6cb0';
+        } else {
+          iconPath = 'M384 480l48 0c11.4 0 21.9-6 27.6-15.9l112-192c5.8-9.9 5.8-22.1 .1-32.1S555.5 224 544 224l-400 0c-11.4 0-21.9 6-27.6 15.9L48 357.1 48 96c0-8.8 7.2-16 16-16l117.5 0c4.2 0 8.3 1.7 11.3 4.7l26.5 26.5c21 21 49.5 32.8 79.2 32.8L416 144c8.8 0 16 7.2 16 16l0 32 48 0 0-32c0-35.3-28.7-64-64-64L298.5 96c-17 0-33.3-6.7-45.3-18.7L226.7 50.7c-12-12-28.3-18.7-45.3-18.7L64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l23.7 0L384 480z';
+          fillColor = '#5a9cff';
+          strokeColor = '#2b6cb0';
+        }
+        return `<path d="${iconPath}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>`;
+      });
 
     nodeEnter.append('text')
       .attr('dy', '0.35em')
-      .attr('y', 0)
+      .attr('y', nodeSize / 2 + fontSize)
       .attr('text-anchor', 'middle')
       .attr('class', 'folder-label')
       .style('font-size', `${fontSize}px`)
@@ -352,7 +421,8 @@ export class DiagramView {
           .select('path')
           .attr('stroke-width', strokeWidth);
         d3.select(this).select('.folder-label')
-          .style('font-size', `${fontSize}px`);
+          .style('font-size', `${fontSize}px`)
+          .attr('y', nodeSize / 2 + fontSize);
       });
 
     node.exit()
@@ -361,56 +431,79 @@ export class DiagramView {
       .attr('transform', d => `translate(${source.x},${source.y})`)
       .remove();
 
-    root.each(d => { d.x0 = d.x; d.y0 = d.y; });
+    root.each(d => { 
+      d.x0 = d.x; 
+      d.y0 = d.y; 
+    });
+
     return root;
   }
 
-  expandMoreNode(d) {
+  toggleMoreNode = debounce((d) => {
     const parentData = d.parent.data;
     const moreNodeIndex = parentData.children.findIndex(child => child.isMore);
     if (moreNodeIndex === -1) return;
 
     const moreNode = parentData.moreNode;
-    const currentShown = parentData.children.length - 1;
-    const nextShown = Math.min(currentShown * 2, currentShown + moreNode.hiddenChildren.length);
-    const nodesToAdd = moreNode.hiddenChildren.splice(0, nextShown - currentShown);
+    const isExpanding = !moreNode.expanded;
 
-    parentData.children.splice(moreNodeIndex, 1, ...nodesToAdd);
-    if (moreNode.hiddenChildren.length > 0) {
-      moreNode.shownCount = nextShown;
-      parentData.children.push(moreNode);
+    let nodesToAdd = [];
+    if (isExpanding) {
+      const currentShown = parentData.children.length - 1;
+      const nodesToAddCount = Math.min(moreNode.shownCount, moreNode.hiddenChildren.length);
+      nodesToAdd = moreNode.hiddenChildren.splice(0, nodesToAddCount);
+      
+      parentData.children.splice(moreNodeIndex, 1, ...nodesToAdd);
+      if (moreNode.hiddenChildren.length > 0) {
+        moreNode.shownCount = currentShown + nodesToAddCount;
+        parentData.children.push(moreNode);
+      } else {
+        delete parentData.moreNode;
+      }
+      moreNode.expanded = true;
     } else {
-      delete parentData.moreNode;
+      const collapseTo = parentData.shownCount;
+      const currentChildren = parentData.children.filter(child => !child.isMore);
+      const nodesToHide = currentChildren.slice(collapseTo);
+      const nodesToKeep = currentChildren.slice(0, collapseTo);
+
+      parentData.children = nodesToKeep;
+      if (nodesToHide.length > 0) {
+        moreNode.hiddenChildren = nodesToHide.concat(moreNode.hiddenChildren);
+        moreNode.shownCount = collapseTo;
+        moreNode.expanded = false;
+        parentData.children.push(moreNode);
+        parentData.moreNode = moreNode;
+      } else {
+        delete parentData.moreNode;
+      }
+      moreNode.expanded = false;
     }
 
     const root = d3.hierarchy(this.treeData);
     const tree = d3.tree()
-      .size([this.width - 360, this.height - 240])
-      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth);
+      .size([this.width - 360, this.height * 2])
+      .separation((a, b) => (a.parent === b.parent ? 3 : 4) / a.depth * 1.5);
     const updatedRoot = tree(root);
-    
-    // Set initial positions for new nodes to parent's last position
-    const newNodeIds = nodesToAdd.map(node => node.fullPath);
+
     updatedRoot.each(node => {
-      if (newNodeIds.includes(node.data.fullPath)) {
+      if (isExpanding && nodesToAdd.map(n => n.fullPath).includes(node.data.fullPath)) {
         node.x0 = d.x0;
         node.y0 = d.y0;
       }
     });
 
     this.g.datum(updatedRoot);
+    this.adjustNodePositions(updatedRoot);
     this.update(updatedRoot);
 
-    const newNodes = updatedRoot.descendants().filter(node => 
-      newNodeIds.includes(node.data.fullPath)
-    );
-
-    if (newNodes.length > 0) {
+    if (isExpanding && nodesToAdd.length > 0) {
+      const newNodes = updatedRoot.descendants().filter(node => 
+        nodesToAdd.map(n => n.fullPath).includes(node.data.fullPath)
+      );
       this.zoomToNodes(newNodes);
-    } else {
-      this.fitToView(updatedRoot);
     }
-  }
+  }, 200);
 
   showNodeModal(data) {
     const existingModal = document.querySelector('.node-modal');
@@ -445,10 +538,13 @@ export class DiagramView {
   }
 
   diagonal(s, d) {
-    return `M ${s.x} ${s.y} 
-            C ${(s.x + d.x) / 2} ${s.y}, 
-              ${(s.x + d.x) / 2} ${d.y}, 
-              ${d.x} ${d.y}`;
+    const baseSize = 120;
+    const nodeSize = baseSize / this.zoomLevel;
+    const offsetY = -nodeSize / 2;
+    return `M ${s.x} ${s.y + offsetY} 
+            C ${(s.x + d.x) / 2} ${s.y + offsetY}, 
+              ${(s.x + d.x) / 2} ${d.y + offsetY}, 
+              ${d.x} ${d.y + offsetY}`;
   }
 
   formatTooltip(data) {
@@ -472,7 +568,6 @@ export class DiagramView {
 
   zoomToNode(node) {
     if (!this.svg || !this.zoomBehavior || !this.g) return;
-    const currentTransform = d3.zoomTransform(this.svg.node());
     const scale = node.depth === 0 ? 1 : 1.5;
     const targetNode = node.depth === 0 ? node : node.parent ? node : node;
     const x = -targetNode.x * scale + this.width / 2;
@@ -495,15 +590,13 @@ export class DiagramView {
       maxY = Math.max(maxY, node.y);
     });
 
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const scaleX = (this.width - 120) / (width || 1);
-    const scaleY = (this.height - 80) / (height || 1);
+    const width = maxX - minX + 120;
+    const height = maxY - minY + 80;
+    const scaleX = this.width / width;
+    const scaleY = this.height / height;
     const scale = Math.min(scaleX, scaleY, 1.5) * 0.9;
     const tx = this.width / 2 - (minX + width / 2) * scale;
     const ty = this.height / 2 - (minY + height / 2) * scale;
-
-    console.log('Zooming to new nodes - Bounds:', { minX, maxX, minY, maxY }, 'Scale:', scale);
 
     this.svg.transition().duration(750).call(
       this.zoomBehavior.transform,
@@ -512,18 +605,12 @@ export class DiagramView {
     this.zoomLevel = scale;
   }
 
-  fitToView(root) {
+  centerRoot(root) {
     if (!this.zoomBehavior || !this.g) return;
-    const bounds = this.getTreeBounds(root);
-    const width = bounds.maxX - bounds.minX;
-    const height = bounds.maxY - bounds.minY;
-    const scaleX = (this.width - 120) / (width || 1);
-    const scaleY = (this.height - 80) / (height || 1);
-    const scale = Math.min(scaleX, scaleY, 1.5) * 0.85;
-    const tx = this.width / 2 - (bounds.minX + width / 2) * scale;
-    const ty = 40 - bounds.minY * scale;
+    const scale = 1;
+    const tx = this.width / 2 - root.x * scale;
+    const ty = 40 - root.y * scale;
 
-    console.log('Fit to View - Bounds:', bounds, 'Scale:', scale);
     this.svg.transition().duration(750).call(
       this.zoomBehavior.transform,
       d3.zoomIdentity.translate(tx, ty).scale(scale)
@@ -545,7 +632,7 @@ export class DiagramView {
   resetView() {
     if (!this.g) return;
     const root = this.g.datum();
-    this.fitToView(root);
+    this.centerRoot(root);
   }
 
   toggleFullscreen() {
