@@ -1,0 +1,262 @@
+/* Diagram View */
+.diagram-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    display: flex;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 4px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .diagram-controls button {
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+    color:#1f2937;
+  }
+  
+  
+  .diagram-controls button:hover {
+    background: rgba(0, 0, 0, 0.05);
+    transform: scale(1.05);
+  }
+  
+  .diagram-controls button:active {
+    transform: scale(0.95);
+  }
+  
+  .dark-mode .diagram-controls {
+    background: rgba(13, 17, 23, 0.95);
+  }
+  
+  .dark-mode .diagram-controls button {
+    color: #c9d1d9;
+  }
+  
+  .dark-mode .diagram-controls button:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    cursor: grab;
+    background: #f9fafb;
+  }
+  
+  svg:active {
+    cursor: grabbing;
+  }
+  
+  svg .link {
+    fill: none;
+    stroke: #d1d5db;
+    stroke-width: 1.5px;
+    stroke-opacity: 0.8;
+    transition: stroke-opacity 0.2s ease;
+  }
+  
+  svg .link:hover {
+    stroke-opacity: 1;
+  }
+  
+  svg .node .folder-icon {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  
+  svg .node .folder-icon:hover {
+    transform: scale(1.1);
+  }
+  
+  svg .node text.folder-label {
+    font-size: 12px;
+    font-weight: 600;
+    fill: #333;
+    cursor: default;
+    pointer-events: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  .dark-mode svg {
+    background: #1f2937;
+  }
+  
+  .dark-mode svg .link {
+    stroke: #4b5563;
+  }
+  
+  .dark-mode svg .node .folder-icon path[fill="#5a9cff"] {
+    fill: #60a5fa;
+    stroke: #2563eb;
+  }
+  
+  .dark-mode svg .node .folder-icon path[fill="#ff9f43"] {
+    fill: #f59e0b;
+    stroke: #d97706;
+  }
+  
+  .dark-mode svg .node text.folder-label {
+    fill: #e5e7eb;
+  }
+  
+  #diagram {
+    position: relative;
+    width: 100%;
+    height: 80vh;
+    min-height: 400px;
+    background: #fff;
+    border-radius: 8px;
+    transition: opacity 0.3s ease;
+    overflow: hidden;
+  }
+  
+  #diagram:fullscreen {
+    height: 100vh;
+    min-height: 0;
+    border-radius: 0;
+    background: #f9fafb;
+  }
+  
+  .view-hidden {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    display: none;
+  }
+  
+  .hidden {
+    display: none !important;
+  }
+  
+  /* Node Modal */
+  .node-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .node-modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  .node-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    transition: color 0.2s ease;
+  }
+  
+  .node-modal-close:hover {
+    color: #333;
+  }
+  
+  .node-modal-content h3 {
+    margin: 0 0 15px;
+    font-size: 18px;
+    color: #333;
+  }
+  
+  .node-modal-content p {
+    margin: 8px 0;
+    font-size: 14px;
+    color: #555;
+  }
+  
+  .node-modal-content a {
+    color: #007bff;
+    text-decoration: none;
+  }
+  
+  .node-modal-content a:hover {
+    text-decoration: underline;
+  }
+  
+  .dark-mode .node-modal-content {
+    background: #1f2937;
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content h3 {
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content p {
+    color: #d1d5db;
+  }
+  
+  .dark-mode .node-modal-close {
+    color: #9ca3af;
+  }
+  
+  .dark-mode .node-modal-close:hover {
+    color: #e5e7eb;
+  }
+  
+  .dark-mode .node-modal-content a {
+    color: #60a5fa;
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    #diagram {
+      height: 70vh;
+      min-height: 350px;
+    }
+  
+    .diagram-controls {
+      gap: 3px;
+      padding: 3px 5px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    #diagram {
+      height: 60vh;
+      min-height: 300px;
+    }
+  
+    .diagram-controls {
+      top: 5px;
+      right: 5px;
+    }
+  
+    .node-modal-content {
+      width: 95%;
+      padding: 15px;
+    }
+  }
